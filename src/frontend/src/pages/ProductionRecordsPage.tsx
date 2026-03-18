@@ -1,0 +1,337 @@
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { ClipboardList, Loader2, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+import {
+  useCreateProductionEntry,
+  useDeleteProductionEntry,
+  useListCostingRecords,
+  useListGrades,
+  useListGsmRanges,
+  useListProductionEntries,
+  useListRMs,
+} from "../hooks/useQueries";
+
+export default function ProductionRecordsPage() {
+  const [selectedRecordId, setSelectedRecordId] = useState<string>("");
+  const [productionQty, setProductionQty] = useState<string>("");
+
+  const { data: entries = [], isLoading } = useListProductionEntries();
+  const { data: records = [] } = useListCostingRecords();
+  const { data: grades = [] } = useListGrades();
+  const { data: gsmRanges = [] } = useListGsmRanges();
+  const { data: rms = [] } = useListRMs();
+  const deleteEntry = useDeleteProductionEntry();
+  const createEntry = useCreateProductionEntry();
+
+  const getGradeName = (id: bigint) =>
+    grades.find((g) => g.id === id)?.name ?? "";
+  const getGsmRangeName = (id: bigint) =>
+    gsmRanges.find((g) => g.id === id)?.name ?? "";
+  const getRMName = (id: bigint) => rms.find((r) => r.id === id)?.name ?? "?";
+
+  const getRecordLabel = (costingRecordId: bigint) => {
+    const rec = records.find((r) => r.id === costingRecordId);
+    if (!rec) return `Record #${costingRecordId}`;
+    return `${getGradeName(rec.gradeId)} ${getGsmRangeName(rec.gsmRangeId)}${
+      rec.name ? ` - ${rec.name}` : ""
+    }`;
+  };
+
+  const handleDelete = async (id: bigint) => {
+    try {
+      await deleteEntry.mutateAsync(id);
+      toast.success("Production entry deleted");
+    } catch {
+      toast.error("Failed to delete entry");
+    }
+  };
+
+  const formatDate = (ts: bigint) => {
+    const ms = Number(ts / 1_000_000n);
+    return new Date(ms).toLocaleDateString();
+  };
+
+  const selectedRecord = records.find(
+    (r) => r.id.toString() === selectedRecordId,
+  );
+  const productionQtyNum = Number.parseFloat(productionQty);
+  const isValidQty =
+    !Number.isNaN(productionQtyNum) && productionQtyNum >= 0.001;
+
+  const calculatedRows =
+    selectedRecord && isValidQty
+      ? selectedRecord.items.map((item) => {
+          const baseQtyMT = Number(selectedRecord.quantity) || 1;
+          const calcQty = (item.quantity / baseQtyMT) * productionQtyNum;
+          return {
+            rmId: item.rmId,
+            rmName: getRMName(item.rmId),
+            baseQty: item.quantity,
+            calculatedQty: calcQty,
+          };
+        })
+      : [];
+
+  const handleSave = async () => {
+    if (!selectedRecord || !isValidQty) return;
+    try {
+      await createEntry.mutateAsync({
+        costingRecordId: selectedRecord.id,
+        productionQtyMT: productionQtyNum,
+      });
+      toast.success("Production entry saved successfully");
+      setSelectedRecordId("");
+      setProductionQty("");
+    } catch {
+      toast.error("Failed to save production entry");
+    }
+  };
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+          <ClipboardList className="w-5 h-5 text-primary" />
+        </div>
+        <div>
+          <h1 className="text-xl font-display font-semibold text-foreground">
+            Production Records
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Record production quantities and view RM consumption history
+          </p>
+        </div>
+      </div>
+
+      {/* Entry Form */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">New Production Entry</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="costing-record">
+                Costing Record <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={selectedRecordId}
+                onValueChange={setSelectedRecordId}
+              >
+                <SelectTrigger
+                  id="costing-record"
+                  data-ocid="production.select"
+                >
+                  <SelectValue placeholder="Select a costing record..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {records.map((r) => (
+                    <SelectItem key={r.id.toString()} value={r.id.toString()}>
+                      {getGradeName(r.gradeId)} {getGsmRangeName(r.gsmRangeId)}
+                      {r.name ? ` - ${r.name}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="production-qty">
+                Actual Production Qty (MT){" "}
+                <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="production-qty"
+                type="number"
+                min="0.001"
+                step="0.001"
+                placeholder="e.g. 2"
+                value={productionQty}
+                onChange={(e) => setProductionQty(e.target.value)}
+                data-ocid="production.input"
+              />
+              {productionQty && !isValidQty && (
+                <p className="text-xs text-destructive">
+                  Quantity must be at least 0.001 MT
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Calculated Consumption Table */}
+          {selectedRecord && isValidQty && calculatedRows.length > 0 && (
+            <div className="space-y-2">
+              <Label>Calculated RM Consumption</Label>
+              <div className="rounded-lg border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead>RM Name</TableHead>
+                      <TableHead className="text-right">
+                        Base Qty (kg)
+                      </TableHead>
+                      <TableHead className="text-right">
+                        Actual Production (MT)
+                      </TableHead>
+                      <TableHead className="text-right">
+                        Calculated Consumption (kg)
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {calculatedRows.map((row, i) => (
+                      <TableRow
+                        key={row.rmId.toString()}
+                        data-ocid={`production.item.${i + 1}`}
+                      >
+                        <TableCell className="font-medium">
+                          {row.rmName}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {row.baseQty.toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {productionQtyNum.toFixed(3)}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold text-primary">
+                          {row.calculatedQty.toFixed(2)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+
+          <Button
+            onClick={handleSave}
+            disabled={!selectedRecord || !isValidQty || createEntry.isPending}
+            data-ocid="production.submit_button"
+          >
+            {createEntry.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Save Production Entry"
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Records Table */}
+      <div>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+          History
+        </h2>
+        {isLoading ? (
+          <div
+            className="flex items-center justify-center py-10 text-muted-foreground"
+            data-ocid="production_records.loading_state"
+          >
+            <Loader2 className="w-5 h-5 animate-spin mr-2" />
+            Loading production records...
+          </div>
+        ) : entries.length === 0 ? (
+          <div
+            className="rounded-lg border border-dashed p-10 text-center"
+            data-ocid="production_records.empty_state"
+          >
+            <ClipboardList className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">
+              No production entries yet
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-lg border overflow-hidden">
+            <Table data-ocid="production_records.table">
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead>Costing Record</TableHead>
+                  <TableHead className="text-right">
+                    Production Qty (MT)
+                  </TableHead>
+                  <TableHead>RM Consumptions</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="w-12" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {entries.map((entry, i) => (
+                  <TableRow
+                    key={entry.id.toString()}
+                    data-ocid={`production_records.item.${i + 1}`}
+                  >
+                    <TableCell className="font-medium">
+                      {getRecordLabel(entry.costingRecordId)}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {entry.productionQtyMT.toFixed(3)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-0.5">
+                        {entry.calculatedItems.length === 0 ? (
+                          <span className="text-xs text-muted-foreground">
+                            —
+                          </span>
+                        ) : (
+                          entry.calculatedItems.map((ci) => (
+                            <div
+                              key={ci.rmId.toString()}
+                              className="text-xs text-muted-foreground"
+                            >
+                              <span className="font-medium text-foreground">
+                                {getRMName(ci.rmId)}
+                              </span>
+                              : {ci.calculatedQty.toFixed(2)} kg
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {formatDate(entry.createdAt)}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(entry.id)}
+                        disabled={deleteEntry.isPending}
+                        data-ocid={`production_records.delete_button.${i + 1}`}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

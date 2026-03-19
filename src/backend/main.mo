@@ -1,8 +1,8 @@
+import Nat "mo:core/Nat";
 import Int "mo:core/Int";
-import Map "mo:core/Map";
 import Time "mo:core/Time";
 import Array "mo:core/Array";
-import Nat "mo:core/Nat";
+import Map "mo:core/Map";
 
 
 
@@ -83,45 +83,47 @@ actor {
     id;
   };
 
-  // Seed initial master data
-  do {
-    // Grade: Deluxe
-    let gId = getNextId();
-    grades.add(gId, { id = gId; name = "Deluxe"; description = "" });
+  system func postupgrade() {
+    // Seed initial master data if grades is empty
+    if (grades.isEmpty()) {
+      // Grade: Deluxe
+      let gId = getNextId();
+      grades.add(gId, { id = gId; name = "Deluxe"; description = "" });
 
-    // GSM Range: 230-249
-    let gsmId = getNextId();
-    gsmRanges.add(gsmId, { id = gsmId; name = "230-249"; minGsm = 230.0; maxGsm = 249.0 });
+      // GSM Range: 230-249
+      let gsmId = getNextId();
+      gsmRanges.add(gsmId, { id = gsmId; name = "230-249"; minGsm = 230.0; maxGsm = 249.0 });
 
-    // Layers: TL, PL, FL, BL
-    let tlId = getNextId();
-    layers.add(tlId, { id = tlId; name = "TL"; description = "Top Layer" });
-    let plId = getNextId();
-    layers.add(plId, { id = plId; name = "PL"; description = "Print Layer" });
-    let flId = getNextId();
-    layers.add(flId, { id = flId; name = "FL"; description = "Flute Layer" });
-    let blId = getNextId();
-    layers.add(blId, { id = blId; name = "BL"; description = "Back Layer" });
+      // Layers: TL, PL, FL, BL
+      let tlId = getNextId();
+      layers.add(tlId, { id = tlId; name = "TL"; description = "Top Layer" });
+      let plId = getNextId();
+      layers.add(plId, { id = plId; name = "PL"; description = "Print Layer" });
+      let flId = getNextId();
+      layers.add(flId, { id = flId; name = "FL"; description = "Flute Layer" });
+      let blId = getNextId();
+      layers.add(blId, { id = blId; name = "BL"; description = "Back Layer" });
 
-    // RMs from reference data
-    let rm1 = getNextId();
-    rms.add(rm1, { id = rm1; name = "Cup Stock"; unitCost = 0.0; unit = "kg" });
-    let rm2 = getNextId();
-    rms.add(rm2, { id = rm2; name = "Note Book"; unitCost = 0.0; unit = "kg" });
-    let rm3 = getNextId();
-    rms.add(rm3, { id = rm3; name = "No.1 Cutting"; unitCost = 0.0; unit = "kg" });
-    let rm4 = getNextId();
-    rms.add(rm4, { id = rm4; name = "White Reco"; unitCost = 0.0; unit = "kg" });
-    let rm5 = getNextId();
-    rms.add(rm5, { id = rm5; name = "Scan Board"; unitCost = 0.0; unit = "kg" });
-    let rm6 = getNextId();
-    rms.add(rm6, { id = rm6; name = "BBC"; unitCost = 0.0; unit = "kg" });
-    let rm7 = getNextId();
-    rms.add(rm7, { id = rm7; name = "ONP (6)"; unitCost = 0.0; unit = "kg" });
-    let rm8 = getNextId();
-    rms.add(rm8, { id = rm8; name = "Broke"; unitCost = 0.0; unit = "kg" });
-    let rm9 = getNextId();
-    rms.add(rm9, { id = rm9; name = "ONP Local"; unitCost = 0.0; unit = "kg" });
+      // RMs from reference data
+      let rm1 = getNextId();
+      rms.add(rm1, { id = rm1; name = "Cup Stock"; unitCost = 0.0; unit = "kg" });
+      let rm2 = getNextId();
+      rms.add(rm2, { id = rm2; name = "Note Book"; unitCost = 0.0; unit = "kg" });
+      let rm3 = getNextId();
+      rms.add(rm3, { id = rm3; name = "No.1 Cutting"; unitCost = 0.0; unit = "kg" });
+      let rm4 = getNextId();
+      rms.add(rm4, { id = rm4; name = "White Reco"; unitCost = 0.0; unit = "kg" });
+      let rm5 = getNextId();
+      rms.add(rm5, { id = rm5; name = "Scan Board"; unitCost = 0.0; unit = "kg" });
+      let rm6 = getNextId();
+      rms.add(rm6, { id = rm6; name = "BBC"; unitCost = 0.0; unit = "kg" });
+      let rm7 = getNextId();
+      rms.add(rm7, { id = rm7; name = "ONP (6)"; unitCost = 0.0; unit = "kg" });
+      let rm8 = getNextId();
+      rms.add(rm8, { id = rm8; name = "Broke"; unitCost = 0.0; unit = "kg" });
+      let rm9 = getNextId();
+      rms.add(rm9, { id = rm9; name = "ONP Local"; unitCost = 0.0; unit = "kg" });
+    };
   };
 
   // GSM Range CRUD

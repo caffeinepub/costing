@@ -57,8 +57,8 @@ export default function ProductionEntryPage() {
   const calculatedRows =
     selectedRecord && isValidQty
       ? selectedRecord.items.map((item) => {
-          const baseQtyMT = Number(selectedRecord.quantity) || 1;
-          const calcQty = (item.quantity / baseQtyMT) * productionQtyNum;
+          // Calculated Consumption (kg) = Base Qty (kg) × Actual Production (MT)
+          const calcQty = item.quantity * productionQtyNum;
           return {
             rmId: item.rmId,
             rmName: getRMName(item.rmId),

@@ -1,7 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -56,7 +55,6 @@ export default function CostingCalculatorPage() {
   const { data: rms = [] } = useListRMs();
   const createRecord = useCreateCostingRecord();
 
-  const [estimateName, setEstimateName] = useState("");
   const [rows, setRows] = useState<CostingRow[]>([newRow()]);
 
   const getRmById = (id: string) => rms.find((r) => String(r.id) === id);
@@ -86,10 +84,6 @@ export default function CostingCalculatorPage() {
     );
 
   const handleSubmit = async () => {
-    if (!estimateName) {
-      toast.error("Please enter an estimate name");
-      return;
-    }
     const validRows = rows.filter(
       (r) =>
         r.rmId && r.quantity && !Number.isNaN(Number.parseFloat(r.quantity)),
@@ -99,16 +93,15 @@ export default function CostingCalculatorPage() {
       return;
     }
 
-    // Use the first row's grade/gsmRange/layer as the record-level fields
-    // (or default to the first filled row)
     const firstValid = validRows[0];
     const gradeId = firstValid.gradeId || "0";
     const gsmRangeId = firstValid.gsmRangeId || "0";
     const layerId = firstValid.layerId || "0";
+    const autoName = `Estimate ${new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}`;
 
     try {
       await createRecord.mutateAsync({
-        name: estimateName,
+        name: autoName,
         gradeId: BigInt(gradeId),
         layerId: BigInt(layerId),
         gsmRangeId: BigInt(gsmRangeId),
@@ -138,24 +131,6 @@ export default function CostingCalculatorPage() {
       </div>
 
       <div className="space-y-5">
-        {/* Estimate Name */}
-        <Card className="shadow-card">
-          <CardContent className="pt-5">
-            <div className="flex items-center gap-4 max-w-md">
-              <Label className="shrink-0 font-semibold">
-                Estimate Name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                data-ocid="calculator.name.input"
-                value={estimateName}
-                onChange={(e) => setEstimateName(e.target.value)}
-                placeholder="e.g. Q1 Duplex Board Run"
-                className="flex-1"
-              />
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Table Form */}
         <Card className="shadow-card">
           <CardHeader className="pb-3">

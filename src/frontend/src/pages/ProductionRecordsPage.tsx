@@ -42,11 +42,20 @@ export default function ProductionRecordsPage() {
   const deleteEntry = useDeleteProductionEntry();
   const createEntry = useCreateProductionEntry();
 
+  const rmMap = new Map(rms.map((r) => [r.id.toString(), r]));
+
   const getGradeName = (id: bigint) =>
     grades.find((g) => g.id === id)?.name ?? "";
   const getGsmRangeName = (id: bigint) =>
     gsmRanges.find((g) => g.id === id)?.name ?? "";
-  const getRMName = (id: bigint) => rms.find((r) => r.id === id)?.name ?? "?";
+  const getRMName = (id: bigint) => rmMap.get(id.toString())?.name ?? "?";
+  const getRMRate = (id: bigint) => rmMap.get(id.toString())?.unitCost ?? 0;
+
+  const fmt = (n: number) =>
+    new Intl.NumberFormat("en-IN", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(n);
 
   const getRecordLabel = (costingRecordId: bigint) => {
     const rec = records.find((r) => r.id === costingRecordId);
@@ -81,11 +90,14 @@ export default function ProductionRecordsPage() {
     selectedRecord && isValidQty
       ? selectedRecord.items.map((item) => {
           const calcQty = item.quantity * productionQtyNum;
+          const rate = getRMRate(item.rmId);
           return {
             rmId: item.rmId,
             rmName: getRMName(item.rmId),
             baseQty: item.quantity,
             calculatedQty: calcQty,
+            rate,
+            value: calcQty * rate,
           };
         })
       : [];
@@ -111,13 +123,14 @@ export default function ProductionRecordsPage() {
       return;
     }
 
-    // Build CSV rows — one row per RM consumption item
     const headers = [
       "Date",
       "Costing Record",
       "Production Qty (MT)",
       "RM Name",
       "Calculated Consumption (kg)",
+      "Rate (₹/kg)",
+      "Value (₹)",
     ];
 
     const rows: string[][] = [];
@@ -127,15 +140,19 @@ export default function ProductionRecordsPage() {
       const qty = entry.productionQtyMT.toFixed(3);
 
       if (entry.calculatedItems.length === 0) {
-        rows.push([date, recordLabel, qty, "", ""]);
+        rows.push([date, recordLabel, qty, "", "", "", ""]);
       } else {
         for (const ci of entry.calculatedItems) {
+          const rate = getRMRate(ci.rmId);
+          const value = ci.calculatedQty * rate;
           rows.push([
             date,
             recordLabel,
             qty,
             getRMName(ci.rmId),
             ci.calculatedQty.toFixed(2),
+            rate.toFixed(2),
+            value.toFixed(2),
           ]);
         }
       }
@@ -164,7 +181,7 @@ export default function ProductionRecordsPage() {
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -264,6 +281,8 @@ export default function ProductionRecordsPage() {
                       <TableHead className="text-right">
                         Calculated Consumption (kg)
                       </TableHead>
+                      <TableHead className="text-right">Rate (₹/kg)</TableHead>
+                      <TableHead className="text-right">Value (₹)</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -283,6 +302,12 @@ export default function ProductionRecordsPage() {
                         </TableCell>
                         <TableCell className="text-right font-semibold text-primary">
                           {row.calculatedQty.toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          ₹{fmt(row.rate)}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold text-primary">
+                          ₹{fmt(row.value)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -341,61 +366,107 @@ export default function ProductionRecordsPage() {
                   <TableHead className="text-right">
                     Production Qty (MT)
                   </TableHead>
-                  <TableHead>RM Consumptions</TableHead>
+                  <TableHead>RM Name</TableHead>
+                  <TableHead className="text-right">
+                    Calculated Consumption (kg)
+                  </TableHead>
+                  <TableHead className="text-right">Rate (₹/kg)</TableHead>
+                  <TableHead className="text-right">Value (₹)</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {entries.map((entry, i) => (
-                  <TableRow
-                    key={entry.id.toString()}
-                    data-ocid={`production_records.item.${i + 1}`}
-                  >
-                    <TableCell className="font-medium">
-                      {getRecordLabel(entry.costingRecordId)}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {entry.productionQtyMT.toFixed(3)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-0.5">
-                        {entry.calculatedItems.length === 0 ? (
-                          <span className="text-xs text-muted-foreground">
-                            —
-                          </span>
-                        ) : (
-                          entry.calculatedItems.map((ci) => (
-                            <div
-                              key={ci.rmId.toString()}
-                              className="text-xs text-muted-foreground"
-                            >
-                              <span className="font-medium text-foreground">
-                                {getRMName(ci.rmId)}
-                              </span>
-                              : {ci.calculatedQty.toFixed(2)} kg
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatDate(entry.createdAt)}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(entry.id)}
-                        disabled={deleteEntry.isPending}
-                        data-ocid={`production_records.delete_button.${i + 1}`}
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                {entries.map((entry, i) => {
+                  const items = entry.calculatedItems;
+                  if (items.length === 0) {
+                    return (
+                      <TableRow
+                        key={entry.id.toString()}
+                        data-ocid={`production_records.item.${i + 1}`}
                       >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                        <TableCell className="font-medium">
+                          {getRecordLabel(entry.costingRecordId)}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold">
+                          {entry.productionQtyMT.toFixed(3)}
+                        </TableCell>
+                        <TableCell
+                          colSpan={4}
+                          className="text-xs text-muted-foreground"
+                        >
+                          —
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {formatDate(entry.createdAt)}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(entry.id)}
+                            disabled={deleteEntry.isPending}
+                            data-ocid={`production_records.delete_button.${i + 1}`}
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  }
+                  return items.map((ci, j) => {
+                    const rate = getRMRate(ci.rmId);
+                    const value = ci.calculatedQty * rate;
+                    const isFirst = j === 0;
+                    const isLast = j === items.length - 1;
+                    return (
+                      <TableRow
+                        key={`${entry.id}-${ci.rmId}`}
+                        data-ocid={`production_records.item.${i + 1}`}
+                        className={
+                          i % 2 === 0 ? "bg-background" : "bg-muted/20"
+                        }
+                      >
+                        <TableCell className="font-medium">
+                          {isFirst ? getRecordLabel(entry.costingRecordId) : ""}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold">
+                          {isFirst ? entry.productionQtyMT.toFixed(3) : ""}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {getRMName(ci.rmId)}
+                        </TableCell>
+                        <TableCell className="text-right text-sm">
+                          {ci.calculatedQty.toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-right text-sm">
+                          ₹{fmt(rate)}
+                        </TableCell>
+                        <TableCell className="text-right text-sm font-semibold text-primary">
+                          ₹{fmt(value)}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {isFirst ? formatDate(entry.createdAt) : ""}
+                        </TableCell>
+                        <TableCell>
+                          {isLast && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(entry.id)}
+                              disabled={deleteEntry.isPending}
+                              data-ocid={`production_records.delete_button.${i + 1}`}
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  });
+                })}
               </TableBody>
             </Table>
           </div>

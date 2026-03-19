@@ -316,7 +316,7 @@ actor {
             {
               rmId = item.rmId;
               baseQty = item.quantity;
-              calculatedQty = item.quantity * (productionQtyMT / costingRecord.quantity.toFloat());
+              calculatedQty = item.quantity * productionQtyMT;
             };
           }
         );

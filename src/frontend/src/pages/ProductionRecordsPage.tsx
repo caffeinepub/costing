@@ -17,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ClipboardList, Loader2, Trash2 } from "lucide-react";
+import { ClipboardList, Download, Loader2, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -80,7 +80,6 @@ export default function ProductionRecordsPage() {
   const calculatedRows =
     selectedRecord && isValidQty
       ? selectedRecord.items.map((item) => {
-          // Calculated Consumption (kg) = Base Qty (kg) × Actual Production (MT)
           const calcQty = item.quantity * productionQtyNum;
           return {
             rmId: item.rmId,
@@ -106,20 +105,90 @@ export default function ProductionRecordsPage() {
     }
   };
 
+  const handleDownloadExcel = () => {
+    if (entries.length === 0) {
+      toast.error("No production records to export");
+      return;
+    }
+
+    // Build CSV rows — one row per RM consumption item
+    const headers = [
+      "Date",
+      "Costing Record",
+      "Production Qty (MT)",
+      "RM Name",
+      "Calculated Consumption (kg)",
+    ];
+
+    const rows: string[][] = [];
+    for (const entry of entries) {
+      const recordLabel = getRecordLabel(entry.costingRecordId);
+      const date = formatDate(entry.createdAt);
+      const qty = entry.productionQtyMT.toFixed(3);
+
+      if (entry.calculatedItems.length === 0) {
+        rows.push([date, recordLabel, qty, "", ""]);
+      } else {
+        for (const ci of entry.calculatedItems) {
+          rows.push([
+            date,
+            recordLabel,
+            qty,
+            getRMName(ci.rmId),
+            ci.calculatedQty.toFixed(2),
+          ]);
+        }
+      }
+    }
+
+    const escapeCsv = (val: string) => {
+      if (val.includes(",") || val.includes('"') || val.includes("\n")) {
+        return `"${val.replace(/"/g, '""')}"`;
+      }
+      return val;
+    };
+
+    const csvContent = [
+      headers.map(escapeCsv).join(","),
+      ...rows.map((r) => r.map(escapeCsv).join(",")),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `production-records-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success("Excel file downloaded");
+  };
+
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-          <ClipboardList className="w-5 h-5 text-primary" />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+            <ClipboardList className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl font-display font-semibold text-foreground">
+              Production Records
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Record production quantities and view RM consumption history
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-xl font-display font-semibold text-foreground">
-            Production Records
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Record production quantities and view RM consumption history
-          </p>
-        </div>
+        <Button
+          variant="outline"
+          onClick={handleDownloadExcel}
+          disabled={entries.length === 0}
+          className="flex items-center gap-2"
+          data-ocid="production_records.download_excel"
+        >
+          <Download className="w-4 h-4" />
+          Download Excel
+        </Button>
       </div>
 
       {/* Entry Form */}

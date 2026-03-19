@@ -6,11 +6,13 @@ import {
   Database,
   FileText,
   LayoutDashboard,
+  TrendingUp,
 } from "lucide-react";
 
 const navItems = [
   { to: "/calculator", label: "Costing Calculator", icon: Calculator },
   { to: "/records", label: "Cost Records", icon: FileText },
+  { to: "/value-costing", label: "Value Costing", icon: TrendingUp },
   { to: "/masters", label: "Masters", icon: Database },
   {
     to: "/production-records",

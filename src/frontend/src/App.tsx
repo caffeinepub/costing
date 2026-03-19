@@ -13,6 +13,7 @@ import CostRecordsPage from "./pages/CostRecordsPage";
 import CostingCalculatorPage from "./pages/CostingCalculatorPage";
 import MastersPage from "./pages/MastersPage";
 import ProductionRecordsPage from "./pages/ProductionRecordsPage";
+import ValueCostingPage from "./pages/ValueCostingPage";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000 } },
@@ -59,12 +60,19 @@ const productionRecordsRoute = createRoute({
   component: ProductionRecordsPage,
 });
 
+const valueCostingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/value-costing",
+  component: ValueCostingPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   calculatorRoute,
   recordsRoute,
   mastersRoute,
   productionRecordsRoute,
+  valueCostingRoute,
 ]);
 
 const router = createRouter({ routeTree });

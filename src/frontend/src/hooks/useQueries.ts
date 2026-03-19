@@ -1,5 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CostingItem } from "../backend.d";
+import {
+  loadCostingRecords,
+  loadProductionEntries,
+  deleteCostingRecord as localDeleteCostingRecord,
+  deleteProductionEntry as localDeleteProductionEntry,
+  saveCostingRecord,
+  saveProductionEntry,
+} from "../lib/localStore";
 import { useActor } from "./useActor";
 
 export function useListGsmRanges() {
@@ -38,31 +46,33 @@ export function useListRMs() {
   });
 }
 
+// Costing Records — use localStorage as primary store
 export function useListCostingRecords() {
-  const { actor, isFetching } = useActor();
   return useQuery({
     queryKey: ["costingRecords"],
-    queryFn: async () => (actor ? actor.listCostingRecords() : []),
-    enabled: !!actor && !isFetching,
+    queryFn: () => loadCostingRecords(),
+    staleTime: 0,
   });
 }
 
 export function useGetCostingRecord(id: bigint | null) {
-  const { actor, isFetching } = useActor();
   return useQuery({
     queryKey: ["costingRecord", id?.toString()],
-    queryFn: async () =>
-      actor && id != null ? actor.getCostingRecord(id) : null,
-    enabled: !!actor && !isFetching && id != null,
+    queryFn: () => {
+      if (id == null) return null;
+      return loadCostingRecords().find((r) => r.id === id) ?? null;
+    },
+    enabled: id != null,
+    staleTime: 0,
   });
 }
 
+// Production Entries — use localStorage as primary store
 export function useListProductionEntries() {
-  const { actor, isFetching } = useActor();
   return useQuery({
     queryKey: ["productionEntries"],
-    queryFn: async () => (actor ? actor.listProductionEntries() : []),
-    enabled: !!actor && !isFetching,
+    queryFn: () => loadProductionEntries(),
+    staleTime: 0,
   });
 }
 
@@ -191,11 +201,11 @@ export function useDeleteRM() {
   });
 }
 
+// Costing Record mutations — save to localStorage
 export function useCreateCostingRecord() {
-  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (d: {
+    mutationFn: async (d: {
       name: string;
       gradeId: bigint;
       layerId: bigint;
@@ -204,45 +214,68 @@ export function useCreateCostingRecord() {
       length: number;
       quantity: bigint;
       items: CostingItem[];
-    }) =>
-      actor!.createCostingRecord(
-        d.name,
-        d.gradeId,
-        d.layerId,
-        d.gsmRangeId,
-        d.width,
-        d.length,
-        d.quantity,
-        d.items,
-      ),
+    }) => {
+      const record = saveCostingRecord({
+        name: d.name,
+        gradeId: d.gradeId,
+        layerId: d.layerId,
+        gsmRangeId: d.gsmRangeId,
+        width: d.width,
+        length: d.length,
+        quantity: d.quantity,
+        items: d.items.map((item) => ({
+          rmId: item.rmId,
+          quantity: item.quantity,
+        })),
+        totalCost: 0,
+      });
+      return record.id;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["costingRecords"] }),
   });
 }
 
 export function useDeleteCostingRecord() {
-  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: bigint) => actor!.deleteCostingRecord(id),
+    mutationFn: async (id: bigint) => {
+      localDeleteCostingRecord(id);
+      return true;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["costingRecords"] }),
   });
 }
 
+// Production Entry mutations — save to localStorage
 export function useCreateProductionEntry() {
-  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (d: { costingRecordId: bigint; productionQtyMT: number }) =>
-      actor!.createProductionEntry(d.costingRecordId, d.productionQtyMT),
+    mutationFn: async (d: {
+      costingRecordId: bigint;
+      productionQtyMT: number;
+    }) => {
+      const record = loadCostingRecords().find(
+        (r) => r.id === d.costingRecordId,
+      );
+      if (!record) throw new Error("Costing record not found");
+      const entry = saveProductionEntry(
+        d.costingRecordId,
+        d.productionQtyMT,
+        record.items,
+      );
+      return entry.id;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["productionEntries"] }),
   });
 }
 
 export function useDeleteProductionEntry() {
-  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: bigint) => actor!.deleteProductionEntry(id),
+    mutationFn: async (id: bigint) => {
+      localDeleteProductionEntry(id);
+      return true;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["productionEntries"] }),
   });
 }

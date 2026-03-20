@@ -67,14 +67,15 @@ actor {
     createdAt : Int;
   };
 
-  // Stable storage arrays for persistence across upgrades
-  stable var stableNextId : Nat = 1;
-  stable var stableGsmRanges : [(Nat, GsmRange)] = [];
-  stable var stableGrades : [(Nat, Grade)] = [];
-  stable var stableLayers : [(Nat, Layer)] = [];
-  stable var stableRMs : [(Nat, RM)] = [];
-  stable var stableCostingRecords : [(Nat, CostingRecord)] = [];
-  stable var stableProductionEntries : [(Nat, ProductionEntry)] = [];
+  // Stable storage for persistence across upgrades
+  var stableNextId : Nat = 1;
+  var stableGsmRanges : [(Nat, GsmRange)] = [];
+  var stableGrades : [(Nat, Grade)] = [];
+  var stableLayers : [(Nat, Layer)] = [];
+  var stableRMs : [(Nat, RM)] = [];
+  var stableCostingRecords : [(Nat, CostingRecord)] = [];
+  var stableProductionEntries : [(Nat, ProductionEntry)] = [];
+  var seededV2 : Bool = false;
 
   // In-memory maps
   var nextId = stableNextId;
@@ -133,6 +134,36 @@ actor {
     rms.add(rm9, { id = rm9; name = "ONP Local"; unitCost = 0.0; unit = "kg" });
   };
 
+  // Seed additional grades and GSM ranges (v2 migration)
+  func seedV2Data() {
+    // Additional grades from reference images
+    let gradeNames = [
+      "Super", "Gloss", "Regular", "Regular Exp", "Nano Lite",
+      "FBB", "Gloss UNC", "Deluxe Stock Lot", "Super Stock Lot",
+      "Gloss Stock Lot", "Regular Stock Lot", "Max Plus Stock Lot",
+      "FBB Stock Lot", "Gloss UNC Stock Lot", "Mixed GSM"
+    ];
+    for (gName in gradeNames.vals()) {
+      let gId = getNextId();
+      grades.add(gId, { id = gId; name = gName; description = "" });
+    };
+
+    // Additional GSM ranges from reference images
+    type GsmSeed = { name : Text; minGsm : Float; maxGsm : Float };
+    let gsmSeeds : [GsmSeed] = [
+      { name = "200-229"; minGsm = 200.0; maxGsm = 229.0 },
+      { name = "230-259"; minGsm = 230.0; maxGsm = 259.0 },
+      { name = "250-279"; minGsm = 250.0; maxGsm = 279.0 },
+      { name = "260-319"; minGsm = 260.0; maxGsm = 319.0 },
+      { name = "280-319"; minGsm = 280.0; maxGsm = 319.0 },
+      { name = "320-400"; minGsm = 320.0; maxGsm = 400.0 }
+    ];
+    for (gsm in gsmSeeds.vals()) {
+      let gsmId = getNextId();
+      gsmRanges.add(gsmId, { id = gsmId; name = gsm.name; minGsm = gsm.minGsm; maxGsm = gsm.maxGsm });
+    };
+  };
+
   // Restore from stable storage on init
   do {
     for ((k, v) in stableGsmRanges.vals()) { gsmRanges.add(k, v) };
@@ -145,6 +176,12 @@ actor {
     // Seed only if brand new canister
     if (grades.isEmpty()) {
       seedInitialData();
+      seedV2Data();
+      seededV2 := true;
+    } else if (not seededV2) {
+      // Migration: add new data to existing canister
+      seedV2Data();
+      seededV2 := true;
     };
   };
 
@@ -181,7 +218,8 @@ actor {
   public shared ({ caller }) func updateGsmRange(id : Nat, name : Text, minGsm : Float, maxGsm : Float) : async Bool {
     switch (gsmRanges.get(id)) {
       case (?_) {
-        gsmRanges.add(id, { id; name; minGsm; maxGsm });
+        gsmRanges.remove(id);
+        ignore gsmRanges.add(id, { id; name; minGsm; maxGsm });
         true;
       };
       case (null) { false };
@@ -213,7 +251,8 @@ actor {
   public shared ({ caller }) func updateGrade(id : Nat, name : Text, description : Text) : async Bool {
     switch (grades.get(id)) {
       case (?_) {
-        grades.add(id, { id; name; description });
+        grades.remove(id);
+        ignore grades.add(id, { id; name; description });
         true;
       };
       case (null) { false };
@@ -245,7 +284,8 @@ actor {
   public shared ({ caller }) func updateLayer(id : Nat, name : Text, description : Text) : async Bool {
     switch (layers.get(id)) {
       case (?_) {
-        layers.add(id, { id; name; description });
+        layers.remove(id);
+        ignore layers.add(id, { id; name; description });
         true;
       };
       case (null) { false };
@@ -277,7 +317,8 @@ actor {
   public shared ({ caller }) func updateRM(id : Nat, name : Text, unitCost : Float, unit : Text) : async Bool {
     switch (rms.get(id)) {
       case (?_) {
-        rms.add(id, { id; name; unitCost; unit });
+        rms.remove(id);
+        ignore rms.add(id, { id; name; unitCost; unit });
         true;
       };
       case (null) { false };

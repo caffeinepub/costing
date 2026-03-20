@@ -1,22 +1,26 @@
 # Costing
 
 ## Current State
-Backend uses `Map.empty<Nat, ...>()` (non-stable in-memory maps) for all data stores: gsmRanges, grades, layers, rms, costingRecords, productionEntries. Data is wiped on every canister upgrade/deployment.
+- Sidebar has two separate modules: "Costing Calculator" (/calculator) and "Cost Records" (/records)
+- CostingCalculatorPage.tsx: form to create new estimates with RM rows
+- CostRecordsPage.tsx: table listing all saved cost records with view/edit/delete dialogs
 
 ## Requested Changes (Diff)
 
 ### Add
-- Stable backup arrays for all data collections and nextId counter
-- preupgrade/postupgrade hooks to serialize/deserialize data to/from stable arrays
+- Tabs inside a single "Costing Calculator" page: "New Estimate" tab (calculator form) and "Cost Records" tab (records list + view/edit/delete dialogs)
 
 ### Modify
-- All state variables converted to use stable-backed storage pattern
+- CostingCalculatorPage.tsx: merge all functionality from CostRecordsPage into it using two tabs
+- Layout.tsx: remove "Cost Records" nav item
+- App.tsx: remove /records route; redirect /records to /calculator
 
 ### Remove
-- Nothing removed functionally
+- CostRecordsPage.tsx (functionality merged into CostingCalculatorPage)
+- Separate "Cost Records" sidebar entry
 
 ## Implementation Plan
-1. Add stable var arrays for each entity type
-2. Add system preupgrade to copy Map data → stable arrays
-3. Add system postupgrade to restore stable arrays → Maps (and seed if empty)
-4. All existing CRUD APIs remain unchanged
+1. Rewrite CostingCalculatorPage.tsx with two tabs: "New Estimate" and "Cost Records"
+2. Move RecordDetailDialog and EditRecordDialog into CostingCalculatorPage.tsx
+3. Update Layout.tsx to remove the Cost Records nav item
+4. Update App.tsx to remove the recordsRoute and add a redirect from /records to /calculator

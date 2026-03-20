@@ -506,8 +506,11 @@ export default function CostRecordsPage() {
       )
       .join(", ");
 
-  const formatDate = (ns: bigint) => {
-    const ms = Number(ns / BigInt(1_000_000));
+  const formatDate = (ns: bigint | number) => {
+    const ms =
+      typeof ns === "bigint"
+        ? Number(ns / 1_000_000n)
+        : Math.round(ns / 1_000_000);
     return new Date(ms).toLocaleDateString("en-IN", {
       year: "numeric",
       month: "short",

@@ -74,8 +74,11 @@ export default function ProductionRecordsPage() {
     }
   };
 
-  const formatDate = (ts: bigint) => {
-    const ms = Number(ts / 1_000_000n);
+  const formatDate = (ts: bigint | number) => {
+    const ms =
+      typeof ts === "bigint"
+        ? Number(ts / 1_000_000n)
+        : Math.round(ts / 1_000_000);
     return new Date(ms).toLocaleDateString();
   };
 

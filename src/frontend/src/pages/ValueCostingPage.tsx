@@ -91,8 +91,11 @@ export default function ValueCostingPage() {
       maximumFractionDigits: 2,
     }).format(n);
 
-  const fmtDate = (ts: bigint) =>
-    new Date(Number(ts) / 1_000_000).toLocaleDateString("en-IN");
+  const fmtDate = (ts: bigint | number): string =>
+    (typeof ts === "bigint"
+      ? new Date(Number(ts / 1_000_000n))
+      : new Date(Math.round(Number(ts) / 1_000_000))
+    ).toLocaleDateString("en-IN");
 
   function handleDownload() {
     const header = [

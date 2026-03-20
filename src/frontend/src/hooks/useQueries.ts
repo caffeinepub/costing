@@ -2,47 +2,63 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CostingItem } from "../backend.d";
 import {
   loadCostingRecords,
+  loadGrades,
+  loadGsmRanges,
+  loadLayers,
   loadProductionEntries,
+  loadRMs,
+  createGrade as localCreateGrade,
+  createGsmRange as localCreateGsmRange,
+  createLayer as localCreateLayer,
+  createRM as localCreateRM,
   deleteCostingRecord as localDeleteCostingRecord,
+  deleteGrade as localDeleteGrade,
+  deleteGsmRange as localDeleteGsmRange,
+  deleteLayer as localDeleteLayer,
   deleteProductionEntry as localDeleteProductionEntry,
+  deleteRM as localDeleteRM,
+  updateGrade as localUpdateGrade,
+  updateGsmRange as localUpdateGsmRange,
+  updateLayer as localUpdateLayer,
+  updateRM as localUpdateRM,
   saveCostingRecord,
   saveProductionEntry,
+  seedMasterDataIfNeeded,
 } from "../lib/localStore";
-import { useActor } from "./useActor";
 
 export function useListGsmRanges() {
-  const { actor, isFetching } = useActor();
+  seedMasterDataIfNeeded();
   return useQuery({
     queryKey: ["gsmRanges"],
-    queryFn: async () => (actor ? actor.listGsmRanges() : []),
-    enabled: !!actor && !isFetching,
+    queryFn: () => loadGsmRanges(),
+    staleTime: 0,
   });
 }
 
 export function useListGrades() {
-  const { actor, isFetching } = useActor();
+  seedMasterDataIfNeeded();
   return useQuery({
     queryKey: ["grades"],
-    queryFn: async () => (actor ? actor.listGrades() : []),
-    enabled: !!actor && !isFetching,
+    queryFn: () => loadGrades(),
+    staleTime: 0,
   });
 }
 
 export function useListLayers() {
-  const { actor, isFetching } = useActor();
+  seedMasterDataIfNeeded();
   return useQuery({
     queryKey: ["layers"],
-    queryFn: async () => (actor ? actor.listLayers() : []),
-    enabled: !!actor && !isFetching,
+    queryFn: () => loadLayers(),
+    staleTime: 0,
   });
 }
 
 export function useListRMs() {
-  const { actor, isFetching } = useActor();
+  seedMasterDataIfNeeded();
   return useQuery({
     queryKey: ["rms"],
-    queryFn: async () => (actor ? actor.listRMs() : []),
-    enabled: !!actor && !isFetching,
+    queryFn: () => loadRMs(),
+    staleTime: 0,
   });
 }
 
@@ -76,19 +92,19 @@ export function useListProductionEntries() {
   });
 }
 
-// Mutations
+// Master Data Mutations — local storage
 export function useCreateGsmRange() {
-  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (d: { name: string; minGsm: number; maxGsm: number }) =>
-      actor!.createGsmRange(d.name, d.minGsm, d.maxGsm),
+    mutationFn: (d: { name: string; minGsm: number; maxGsm: number }) => {
+      const item = localCreateGsmRange(d.name, d.minGsm, d.maxGsm);
+      return Promise.resolve(item.id);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["gsmRanges"] }),
   });
 }
 
 export function useUpdateGsmRange() {
-  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (d: {
@@ -96,90 +112,93 @@ export function useUpdateGsmRange() {
       name: string;
       minGsm: number;
       maxGsm: number;
-    }) => actor!.updateGsmRange(d.id, d.name, d.minGsm, d.maxGsm),
+    }) => {
+      return Promise.resolve(
+        localUpdateGsmRange(d.id, d.name, d.minGsm, d.maxGsm),
+      );
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["gsmRanges"] }),
   });
 }
 
 export function useDeleteGsmRange() {
-  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: bigint) => actor!.deleteGsmRange(id),
+    mutationFn: (id: bigint) => Promise.resolve(localDeleteGsmRange(id)),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["gsmRanges"] }),
   });
 }
 
 export function useCreateGrade() {
-  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (d: { name: string; description: string }) =>
-      actor!.createGrade(d.name, d.description),
+    mutationFn: (d: { name: string; description: string }) => {
+      const item = localCreateGrade(d.name, d.description);
+      return Promise.resolve(item.id);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["grades"] }),
   });
 }
 
 export function useUpdateGrade() {
-  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (d: { id: bigint; name: string; description: string }) =>
-      actor!.updateGrade(d.id, d.name, d.description),
+    mutationFn: (d: { id: bigint; name: string; description: string }) => {
+      return Promise.resolve(localUpdateGrade(d.id, d.name, d.description));
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["grades"] }),
   });
 }
 
 export function useDeleteGrade() {
-  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: bigint) => actor!.deleteGrade(id),
+    mutationFn: (id: bigint) => Promise.resolve(localDeleteGrade(id)),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["grades"] }),
   });
 }
 
 export function useCreateLayer() {
-  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (d: { name: string; description: string }) =>
-      actor!.createLayer(d.name, d.description),
+    mutationFn: (d: { name: string; description: string }) => {
+      const item = localCreateLayer(d.name, d.description);
+      return Promise.resolve(item.id);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["layers"] }),
   });
 }
 
 export function useUpdateLayer() {
-  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (d: { id: bigint; name: string; description: string }) =>
-      actor!.updateLayer(d.id, d.name, d.description),
+    mutationFn: (d: { id: bigint; name: string; description: string }) => {
+      return Promise.resolve(localUpdateLayer(d.id, d.name, d.description));
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["layers"] }),
   });
 }
 
 export function useDeleteLayer() {
-  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: bigint) => actor!.deleteLayer(id),
+    mutationFn: (id: bigint) => Promise.resolve(localDeleteLayer(id)),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["layers"] }),
   });
 }
 
 export function useCreateRM() {
-  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (d: { name: string; unitCost: number; unit: string }) =>
-      actor!.createRM(d.name, d.unitCost, d.unit),
+    mutationFn: (d: { name: string; unitCost: number; unit: string }) => {
+      const item = localCreateRM(d.name, d.unitCost, d.unit);
+      return Promise.resolve(item.id);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["rms"] }),
   });
 }
 
 export function useUpdateRM() {
-  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (d: {
@@ -187,16 +206,17 @@ export function useUpdateRM() {
       name: string;
       unitCost: number;
       unit: string;
-    }) => actor!.updateRM(d.id, d.name, d.unitCost, d.unit),
+    }) => {
+      return Promise.resolve(localUpdateRM(d.id, d.name, d.unitCost, d.unit));
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["rms"] }),
   });
 }
 
 export function useDeleteRM() {
-  const { actor } = useActor();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: bigint) => actor!.deleteRM(id),
+    mutationFn: (id: bigint) => Promise.resolve(localDeleteRM(id)),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["rms"] }),
   });
 }

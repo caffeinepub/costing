@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -9,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Download, TrendingUp } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
   useListCostingRecords,
   useListGrades,
@@ -19,6 +21,7 @@ import {
 
 const SKELETON_ROWS = ["s1", "s2", "s3", "s4", "s5", "s6"];
 const SKELETON_CELLS = ["c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9"];
+const LS_KEY = "valueCostingRateOverrides";
 
 type FlatRow = {
   recordId: bigint;
@@ -29,10 +32,18 @@ type FlatRow = {
   rmName: string;
   rmId: string;
   baseQty: number;
-  rate: number;
-  value: number;
+  defaultRate: number;
   createdAt: bigint;
 };
+
+function loadOverrides(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
 
 export default function ValueCostingPage() {
   const { data: records, isLoading: loadingRecords } = useListCostingRecords();
@@ -40,6 +51,13 @@ export default function ValueCostingPage() {
   const { data: gsmRanges, isLoading: loadingGsm } = useListGsmRanges();
   const { data: layers, isLoading: loadingLayers } = useListLayers();
   const { data: rms, isLoading: loadingRMs } = useListRMs();
+
+  const [rateOverrides, setRateOverrides] =
+    useState<Record<string, number>>(loadOverrides);
+
+  useEffect(() => {
+    localStorage.setItem(LS_KEY, JSON.stringify(rateOverrides));
+  }, [rateOverrides]);
 
   const isLoading =
     loadingRecords ||
@@ -57,8 +75,6 @@ export default function ValueCostingPage() {
   for (const rec of records ?? []) {
     for (const item of rec.items) {
       const rm = rmMap.get(item.rmId);
-      const rate = rm?.unitCost ?? 0;
-      const value = item.quantity * rate;
       rows.push({
         recordId: rec.id,
         recordName: rec.name,
@@ -68,11 +84,32 @@ export default function ValueCostingPage() {
         rmName: rm?.name ?? "-",
         rmId: item.rmId.toString(),
         baseQty: item.quantity,
-        rate,
-        value,
+        defaultRate: rm?.unitCost ?? 0,
         createdAt: rec.createdAt,
       });
     }
+  }
+
+  function getOverrideKey(row: FlatRow) {
+    return `${row.recordId}-${row.rmId}`;
+  }
+
+  function getRate(row: FlatRow): number {
+    const key = getOverrideKey(row);
+    return key in rateOverrides ? rateOverrides[key] : row.defaultRate;
+  }
+
+  function getValue(row: FlatRow): number {
+    return row.baseQty * getRate(row);
+  }
+
+  function handleRateChange(row: FlatRow, value: string) {
+    const key = getOverrideKey(row);
+    const parsed = Number.parseFloat(value);
+    setRateOverrides((prev) => ({
+      ...prev,
+      [key]: Number.isNaN(parsed) ? 0 : parsed,
+    }));
   }
 
   // Group by recordId for subtotals
@@ -83,7 +120,7 @@ export default function ValueCostingPage() {
     recordGroups.get(key)!.push(row);
   }
 
-  const grandTotal = rows.reduce((sum, r) => sum + r.value, 0);
+  const grandTotal = rows.reduce((sum, r) => sum + getValue(r), 0);
 
   const fmt = (n: number) =>
     new Intl.NumberFormat("en-IN", {
@@ -117,8 +154,8 @@ export default function ValueCostingPage() {
         `"${r.layer}"`,
         `"${r.rmName}"`,
         r.baseQty.toFixed(2),
-        r.rate.toFixed(2),
-        r.value.toFixed(2),
+        getRate(r).toFixed(2),
+        getValue(r).toFixed(2),
         fmtDate(r.createdAt),
       ].join(","),
     );
@@ -252,7 +289,10 @@ export default function ValueCostingPage() {
               <TableBody>
                 {Array.from(recordGroups.entries()).map(
                   ([key, groupRows], groupIdx) => {
-                    const subtotal = groupRows.reduce((s, r) => s + r.value, 0);
+                    const subtotal = groupRows.reduce(
+                      (s, r) => s + getValue(r),
+                      0,
+                    );
                     const isEven = groupIdx % 2 === 0;
                     return (
                       <>
@@ -280,11 +320,21 @@ export default function ValueCostingPage() {
                             <TableCell className="text-sm text-right tabular-nums">
                               {fmt(row.baseQty)}
                             </TableCell>
-                            <TableCell className="text-sm text-right tabular-nums">
-                              ₹{fmt(row.rate)}
+                            <TableCell className="text-right py-1">
+                              <Input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                value={getRate(row)}
+                                onChange={(e) =>
+                                  handleRateChange(row, e.target.value)
+                                }
+                                className="w-24 h-7 text-right text-sm tabular-nums ml-auto px-2"
+                                data-ocid={`value_costing.input.${groupIdx + 1}`}
+                              />
                             </TableCell>
                             <TableCell className="text-sm text-right tabular-nums font-medium">
-                              ₹{fmt(row.value)}
+                              ₹{fmt(getValue(row))}
                             </TableCell>
                             <TableCell className="text-sm text-muted-foreground">
                               {rowIdx === 0 ? fmtDate(row.createdAt) : ""}

@@ -30,6 +30,17 @@ import {
   useListRMs,
 } from "../hooks/useQueries";
 
+const VC_LS_KEY = "valueCostingRateOverrides";
+
+function loadVCRateOverrides(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(VC_LS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
 export default function ProductionRecordsPage() {
   const [selectedRecordId, setSelectedRecordId] = useState<string>("");
   const [productionQty, setProductionQty] = useState<string>("");
@@ -49,7 +60,15 @@ export default function ProductionRecordsPage() {
   const getGsmRangeName = (id: bigint) =>
     gsmRanges.find((g) => g.id === id)?.name ?? "";
   const getRMName = (id: bigint) => rmMap.get(id.toString())?.name ?? "?";
-  const getRMRate = (id: bigint) => rmMap.get(id.toString())?.unitCost ?? 0;
+  const getRMDefaultRate = (id: bigint) =>
+    rmMap.get(id.toString())?.unitCost ?? 0;
+
+  // Get rate for an RM within a costing record — prefer Value Costing overrides
+  const getRate = (costingRecordId: bigint, rmId: bigint): number => {
+    const overrides = loadVCRateOverrides();
+    const key = `${costingRecordId}-${rmId}`;
+    return key in overrides ? overrides[key] : getRMDefaultRate(rmId);
+  };
 
   const fmt = (n: number) =>
     new Intl.NumberFormat("en-IN", {
@@ -93,14 +112,15 @@ export default function ProductionRecordsPage() {
     selectedRecord && isValidQty
       ? selectedRecord.items.map((item) => {
           const calcQty = item.quantity * productionQtyNum;
-          const rate = getRMRate(item.rmId);
+          const rate = getRate(selectedRecord.id, item.rmId);
+          const value = calcQty * rate;
           return {
             rmId: item.rmId,
             rmName: getRMName(item.rmId),
             baseQty: item.quantity,
             calculatedQty: calcQty,
             rate,
-            value: calcQty * rate,
+            value,
           };
         })
       : [];
@@ -134,6 +154,7 @@ export default function ProductionRecordsPage() {
       "Calculated Consumption (kg)",
       "Rate (₹/kg)",
       "Value (₹)",
+      "Per Ton (₹/MT)",
     ];
 
     const rows: string[][] = [];
@@ -143,11 +164,13 @@ export default function ProductionRecordsPage() {
       const qty = entry.productionQtyMT.toFixed(3);
 
       if (entry.calculatedItems.length === 0) {
-        rows.push([date, recordLabel, qty, "", "", "", ""]);
+        rows.push([date, recordLabel, qty, "", "", "", "", ""]);
       } else {
         for (const ci of entry.calculatedItems) {
-          const rate = getRMRate(ci.rmId);
+          const rate = getRate(entry.costingRecordId, ci.rmId);
           const value = ci.calculatedQty * rate;
+          const perTon =
+            entry.productionQtyMT > 0 ? value / entry.productionQtyMT : 0;
           rows.push([
             date,
             recordLabel,
@@ -156,6 +179,7 @@ export default function ProductionRecordsPage() {
             ci.calculatedQty.toFixed(2),
             rate.toFixed(2),
             value.toFixed(2),
+            perTon.toFixed(2),
           ]);
         }
       }
@@ -375,6 +399,7 @@ export default function ProductionRecordsPage() {
                   </TableHead>
                   <TableHead className="text-right">Rate (₹/kg)</TableHead>
                   <TableHead className="text-right">Value (₹)</TableHead>
+                  <TableHead className="text-right">Per Ton (₹/MT)</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
@@ -395,7 +420,7 @@ export default function ProductionRecordsPage() {
                           {entry.productionQtyMT.toFixed(3)}
                         </TableCell>
                         <TableCell
-                          colSpan={4}
+                          colSpan={5}
                           className="text-xs text-muted-foreground"
                         >
                           —
@@ -403,24 +428,17 @@ export default function ProductionRecordsPage() {
                         <TableCell className="text-sm text-muted-foreground">
                           {formatDate(entry.createdAt)}
                         </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDelete(entry.id)}
-                            disabled={deleteEntry.isPending}
-                            data-ocid={`production_records.delete_button.${i + 1}`}
-                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
+                        <TableCell />
                       </TableRow>
                     );
                   }
                   return items.map((ci, j) => {
-                    const rate = getRMRate(ci.rmId);
+                    const rate = getRate(entry.costingRecordId, ci.rmId);
                     const value = ci.calculatedQty * rate;
+                    const perTon =
+                      entry.productionQtyMT > 0
+                        ? value / entry.productionQtyMT
+                        : 0;
                     const isFirst = j === 0;
                     const isLast = j === items.length - 1;
                     return (
@@ -448,6 +466,9 @@ export default function ProductionRecordsPage() {
                         </TableCell>
                         <TableCell className="text-right text-sm font-semibold text-primary">
                           ₹{fmt(value)}
+                        </TableCell>
+                        <TableCell className="text-right text-sm font-semibold text-amber-600">
+                          ₹{fmt(perTon)}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {isFirst ? formatDate(entry.createdAt) : ""}

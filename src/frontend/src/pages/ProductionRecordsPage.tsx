@@ -17,7 +17,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ClipboardList, Download, Loader2, Trash2 } from "lucide-react";
+import {
+  BarChart2,
+  ClipboardList,
+  Download,
+  Loader2,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -41,6 +47,30 @@ function loadVCRateOverrides(): Record<string, number> {
   }
 }
 
+interface ActualProductionItem {
+  rmId: string;
+  rmName: string;
+  unit: string;
+  actualConsumption: number;
+}
+
+interface ActualProductionEntry {
+  id: string;
+  costingRecordId: string;
+  productionQtyMT: number;
+  date: string;
+  items: ActualProductionItem[];
+}
+
+function loadActualEntries(): ActualProductionEntry[] {
+  try {
+    const raw = localStorage.getItem("actualProductionEntries");
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function ProductionRecordsPage() {
   const [selectedRecordId, setSelectedRecordId] = useState<string>("");
   const [productionQty, setProductionQty] = useState<string>("");
@@ -52,6 +82,7 @@ export default function ProductionRecordsPage() {
   const { data: rms = [] } = useListRMs();
   const deleteEntry = useDeleteProductionEntry();
   const createEntry = useCreateProductionEntry();
+  const [actualEntries] = useState<ActualProductionEntry[]>(loadActualEntries);
 
   const rmMap = new Map(rms.map((r) => [r.id.toString(), r]));
 
@@ -60,10 +91,10 @@ export default function ProductionRecordsPage() {
   const getGsmRangeName = (id: bigint) =>
     gsmRanges.find((g) => g.id === id)?.name ?? "";
   const getRMName = (id: bigint) => rmMap.get(id.toString())?.name ?? "?";
+  const getRMUnit = (id: bigint) => rmMap.get(id.toString())?.unit ?? "kg";
   const getRMDefaultRate = (id: bigint) =>
     rmMap.get(id.toString())?.unitCost ?? 0;
 
-  // Get rate for an RM within a costing record — prefer Value Costing overrides
   const getRate = (costingRecordId: bigint, rmId: bigint): number => {
     const overrides = loadVCRateOverrides();
     const key = `${costingRecordId}-${rmId}`;
@@ -117,6 +148,7 @@ export default function ProductionRecordsPage() {
           return {
             rmId: item.rmId,
             rmName: getRMName(item.rmId),
+            rmUnit: getRMUnit(item.rmId),
             baseQty: item.quantity,
             calculatedQty: calcQty,
             rate,
@@ -151,6 +183,7 @@ export default function ProductionRecordsPage() {
       "Costing Record",
       "Production Qty (MT)",
       "RM Name",
+      "Unit",
       "Calculated Consumption (kg)",
       "Rate (₹/kg)",
       "Value (₹)",
@@ -164,7 +197,7 @@ export default function ProductionRecordsPage() {
       const qty = entry.productionQtyMT.toFixed(3);
 
       if (entry.calculatedItems.length === 0) {
-        rows.push([date, recordLabel, qty, "", "", "", "", ""]);
+        rows.push([date, recordLabel, qty, "", "", "", "", "", ""]);
       } else {
         for (const ci of entry.calculatedItems) {
           const rate = getRate(entry.costingRecordId, ci.rmId);
@@ -176,6 +209,7 @@ export default function ProductionRecordsPage() {
             recordLabel,
             qty,
             getRMName(ci.rmId),
+            getRMUnit(ci.rmId),
             ci.calculatedQty.toFixed(2),
             rate.toFixed(2),
             value.toFixed(2),
@@ -299,6 +333,7 @@ export default function ProductionRecordsPage() {
                   <TableHeader>
                     <TableRow className="bg-muted/50">
                       <TableHead>RM Name</TableHead>
+                      <TableHead>Unit</TableHead>
                       <TableHead className="text-right">
                         Base Qty (kg)
                       </TableHead>
@@ -320,6 +355,9 @@ export default function ProductionRecordsPage() {
                       >
                         <TableCell className="font-medium">
                           {row.rmName}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {row.rmUnit}
                         </TableCell>
                         <TableCell className="text-right">
                           {row.baseQty.toFixed(2)}
@@ -394,6 +432,7 @@ export default function ProductionRecordsPage() {
                     Production Qty (MT)
                   </TableHead>
                   <TableHead>RM Name</TableHead>
+                  <TableHead>Unit</TableHead>
                   <TableHead className="text-right">
                     Calculated Consumption (kg)
                   </TableHead>
@@ -414,13 +453,13 @@ export default function ProductionRecordsPage() {
                         data-ocid={`production_records.item.${i + 1}`}
                       >
                         <TableCell className="font-medium">
-                          {getRecordLabel(entry.costingRecordId)}
+                          {getRecordLabel(BigInt(entry.costingRecordId))}
                         </TableCell>
                         <TableCell className="text-right font-semibold">
                           {entry.productionQtyMT.toFixed(3)}
                         </TableCell>
                         <TableCell
-                          colSpan={5}
+                          colSpan={6}
                           className="text-xs text-muted-foreground"
                         >
                           —
@@ -458,6 +497,9 @@ export default function ProductionRecordsPage() {
                         <TableCell className="text-sm">
                           {getRMName(ci.rmId)}
                         </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {getRMUnit(ci.rmId)}
+                        </TableCell>
                         <TableCell className="text-right text-sm">
                           {ci.calculatedQty.toFixed(2)}
                         </TableCell>
@@ -494,6 +536,132 @@ export default function ProductionRecordsPage() {
               </TableBody>
             </Table>
           </div>
+        )}
+      </div>
+
+      {/* Actual Production Summary */}
+      <div>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+          <BarChart2 className="w-4 h-4" />
+          Actual Production Summary (Date-wise)
+        </h2>
+        {actualEntries.length === 0 ? (
+          <div
+            className="rounded-lg border border-dashed p-10 text-center"
+            data-ocid="actual_production_summary.empty_state"
+          >
+            <BarChart2 className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">
+              No actual production data yet. Add entries in the Actual
+              Production module.
+            </p>
+          </div>
+        ) : (
+          (() => {
+            // Group by date
+            const groups: Record<string, ActualProductionEntry[]> = {};
+            for (const entry of actualEntries) {
+              const dateKey = new Date(entry.date).toLocaleDateString();
+              if (!groups[dateKey]) groups[dateKey] = [];
+              groups[dateKey].push(entry);
+            }
+            // Sort dates descending
+            const sortedDates = Object.keys(groups).sort((a, b) => {
+              return new Date(b).getTime() - new Date(a).getTime();
+            });
+            return (
+              <div className="space-y-4">
+                {sortedDates.map((dateKey) => (
+                  <div
+                    key={dateKey}
+                    className="rounded-lg border overflow-hidden"
+                  >
+                    <div className="bg-muted/70 px-4 py-2 text-sm font-semibold border-b">
+                      {dateKey}
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead>Costing Record</TableHead>
+                          <TableHead>RM Name</TableHead>
+                          <TableHead>Unit</TableHead>
+                          <TableHead className="text-right">
+                            Planned (kg)
+                          </TableHead>
+                          <TableHead className="text-right">
+                            Actual (kg)
+                          </TableHead>
+                          <TableHead className="text-right">
+                            Variance (kg)
+                          </TableHead>
+                          <TableHead className="text-right">
+                            Variance (%)
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {groups[dateKey].flatMap((entry, ei) => {
+                          const rec = records.find(
+                            (r) => r.id.toString() === entry.costingRecordId,
+                          );
+                          return entry.items.map((item, ii) => {
+                            // Find planned qty from costing record
+                            let planned = 0;
+                            if (rec) {
+                              const rmItem = rec.items.find(
+                                (ri: any) => ri.rmId.toString() === item.rmId,
+                              );
+                              if (rmItem) {
+                                planned =
+                                  rmItem.quantity * entry.productionQtyMT;
+                              }
+                            }
+                            const actual = item.actualConsumption;
+                            const variance = actual - planned;
+                            const variancePct =
+                              planned > 0 ? (variance / planned) * 100 : 0;
+                            const overPlan = variance > 0;
+                            return (
+                              <TableRow
+                                key={`${entry.id}-${item.rmId}-${ii}`}
+                                data-ocid={`actual_production_summary.item.${ei + 1}`}
+                              >
+                                <TableCell className="font-medium">
+                                  {getRecordLabel(
+                                    BigInt(entry.costingRecordId),
+                                  )}
+                                </TableCell>
+                                <TableCell>{item.rmName}</TableCell>
+                                <TableCell>{item.unit}</TableCell>
+                                <TableCell className="text-right">
+                                  {planned.toFixed(2)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {actual.toFixed(2)}
+                                </TableCell>
+                                <TableCell
+                                  className={`text-right font-semibold ${overPlan ? "text-destructive" : "text-green-600"}`}
+                                >
+                                  {variance > 0 ? "+" : ""}
+                                  {variance.toFixed(2)}
+                                </TableCell>
+                                <TableCell
+                                  className={`text-right font-semibold ${overPlan ? "text-destructive" : "text-green-600"}`}
+                                >
+                                  {variance > 0 ? "+" : ""}
+                                  {variancePct.toFixed(1)}%
+                                </TableCell>
+                              </TableRow>
+                            );
+                          });
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ))}
+              </div>
+            );
+          })()
         )}
       </div>
     </div>

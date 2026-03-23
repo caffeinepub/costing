@@ -20,7 +20,18 @@ import {
 } from "../hooks/useQueries";
 
 const SKELETON_ROWS = ["s1", "s2", "s3", "s4", "s5", "s6"];
-const SKELETON_CELLS = ["c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9"];
+const SKELETON_CELLS = [
+  "c1",
+  "c2",
+  "c3",
+  "c4",
+  "c5",
+  "c6",
+  "c7",
+  "c8",
+  "c9",
+  "c10",
+];
 const LS_KEY = "valueCostingRateOverrides";
 
 type FlatRow = {
@@ -31,6 +42,7 @@ type FlatRow = {
   layer: string;
   rmName: string;
   rmId: string;
+  unit: string;
   baseQty: number;
   defaultRate: number;
   createdAt: bigint;
@@ -83,6 +95,7 @@ export default function ValueCostingPage() {
         layer: layerMap.get(rec.layerId) ?? "-",
         rmName: rm?.name ?? "-",
         rmId: item.rmId.toString(),
+        unit: rm?.unit ?? "kg",
         baseQty: item.quantity,
         defaultRate: rm?.unitCost ?? 0,
         createdAt: rec.createdAt,
@@ -141,6 +154,7 @@ export default function ValueCostingPage() {
       "GSM Range",
       "Layer",
       "RM Material",
+      "Unit",
       "Base Qty (kg)",
       "Rate (₹/kg)",
       "Value (₹)",
@@ -153,6 +167,7 @@ export default function ValueCostingPage() {
         `"${r.gsmRange}"`,
         `"${r.layer}"`,
         `"${r.rmName}"`,
+        `"${r.unit}"`,
         r.baseQty.toFixed(2),
         getRate(r).toFixed(2),
         getValue(r).toFixed(2),
@@ -216,6 +231,7 @@ export default function ValueCostingPage() {
                     "GSM Range",
                     "Layer",
                     "RM Material",
+                    "Unit",
                     "Base Qty (kg)",
                     "Rate (₹/kg)",
                     "Value (₹)",
@@ -272,6 +288,7 @@ export default function ValueCostingPage() {
                   <TableHead className="text-xs font-semibold">
                     RM Material
                   </TableHead>
+                  <TableHead className="text-xs font-semibold">Unit</TableHead>
                   <TableHead className="text-xs font-semibold text-right">
                     Base Qty (kg)
                   </TableHead>
@@ -317,6 +334,9 @@ export default function ValueCostingPage() {
                             <TableCell className="text-sm">
                               {row.rmName}
                             </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {row.unit}
+                            </TableCell>
                             <TableCell className="text-sm text-right tabular-nums">
                               {fmt(row.baseQty)}
                             </TableCell>
@@ -348,7 +368,7 @@ export default function ValueCostingPage() {
                           data-ocid={`value_costing.row.${groupIdx + 1}`}
                         >
                           <TableCell
-                            colSpan={7}
+                            colSpan={8}
                             className="text-xs font-semibold text-primary/80 py-2 text-right"
                           >
                             Subtotal — {groupRows[0].recordName}
@@ -365,7 +385,7 @@ export default function ValueCostingPage() {
                 {/* Grand total */}
                 <TableRow className="bg-primary/10 border-t-2 border-primary/20">
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="font-bold text-sm text-right py-3"
                   >
                     Grand Total

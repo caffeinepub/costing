@@ -766,7 +766,7 @@ function RMSection() {
     setEditId(r.id);
     setEditName(r.name);
     setEditUnitCost(String(r.unitCost));
-    setEditUnit(r.unit);
+    setEditUnit(r.unit ?? "");
     setAdding(false);
   };
 
@@ -895,6 +895,7 @@ function RMSection() {
                       <Input
                         value={editUnit}
                         onChange={(e) => setEditUnit(e.target.value)}
+                        placeholder="e.g. kg"
                         className="h-8 text-sm"
                       />
                     </TableCell>

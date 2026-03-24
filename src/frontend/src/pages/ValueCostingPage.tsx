@@ -33,6 +33,7 @@ const SKELETON_CELLS = [
   "c10",
 ];
 const LS_KEY = "valueCostingRateOverrides";
+const LS_UNIT_KEY = "valueCostingUnitOverrides2";
 
 type FlatRow = {
   recordId: bigint;
@@ -57,6 +58,15 @@ function loadOverrides(): Record<string, number> {
   }
 }
 
+function loadUnitOverrides(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(LS_UNIT_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
 export default function ValueCostingPage() {
   const { data: records, isLoading: loadingRecords } = useListCostingRecords();
   const { data: grades, isLoading: loadingGrades } = useListGrades();
@@ -66,10 +76,16 @@ export default function ValueCostingPage() {
 
   const [rateOverrides, setRateOverrides] =
     useState<Record<string, number>>(loadOverrides);
+  const [unitOverrides, setUnitOverrides] =
+    useState<Record<string, string>>(loadUnitOverrides);
 
   useEffect(() => {
     localStorage.setItem(LS_KEY, JSON.stringify(rateOverrides));
   }, [rateOverrides]);
+
+  useEffect(() => {
+    localStorage.setItem(LS_UNIT_KEY, JSON.stringify(unitOverrides));
+  }, [unitOverrides]);
 
   const isLoading =
     loadingRecords ||
@@ -125,6 +141,16 @@ export default function ValueCostingPage() {
     }));
   }
 
+  function getUnit(row: FlatRow): string {
+    const key = getOverrideKey(row);
+    return key in unitOverrides ? unitOverrides[key] : row.unit;
+  }
+
+  function handleUnitChange(row: FlatRow, value: string) {
+    const key = getOverrideKey(row);
+    setUnitOverrides((prev) => ({ ...prev, [key]: value }));
+  }
+
   // Group by recordId for subtotals
   const recordGroups: Map<string, FlatRow[]> = new Map();
   for (const row of rows) {
@@ -167,7 +193,7 @@ export default function ValueCostingPage() {
         `"${r.gsmRange}"`,
         `"${r.layer}"`,
         `"${r.rmName}"`,
-        `"${r.unit}"`,
+        `"${getUnit(r)}"`,
         r.baseQty.toFixed(2),
         getRate(r).toFixed(2),
         getValue(r).toFixed(2),
@@ -183,6 +209,19 @@ export default function ValueCostingPage() {
     a.click();
     URL.revokeObjectURL(url);
   }
+
+  const TABLE_HEADERS = [
+    "Record Name",
+    "Grade",
+    "GSM Range",
+    "Layer",
+    "RM Material",
+    "Unit",
+    "Base Qty (kg)",
+    "Rate (₹/kg)",
+    "Value (₹)",
+    "Created",
+  ];
 
   return (
     <div className="flex flex-col h-full">
@@ -225,18 +264,7 @@ export default function ValueCostingPage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
-                  {[
-                    "Record Name",
-                    "Grade",
-                    "GSM Range",
-                    "Layer",
-                    "RM Material",
-                    "Unit",
-                    "Base Qty (kg)",
-                    "Rate (₹/kg)",
-                    "Value (₹)",
-                    "Created",
-                  ].map((h) => (
+                  {TABLE_HEADERS.map((h) => (
                     <TableHead key={h} className="text-xs font-semibold">
                       {h}
                     </TableHead>
@@ -334,8 +362,16 @@ export default function ValueCostingPage() {
                             <TableCell className="text-sm">
                               {row.rmName}
                             </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {row.unit}
+                            <TableCell className="py-1">
+                              <Input
+                                type="text"
+                                value={getUnit(row)}
+                                onChange={(e) =>
+                                  handleUnitChange(row, e.target.value)
+                                }
+                                className="w-20 h-7 text-sm px-2"
+                                data-ocid={`value_costing.unit.${groupIdx + 1}`}
+                              />
                             </TableCell>
                             <TableCell className="text-sm text-right tabular-nums">
                               {fmt(row.baseQty)}
@@ -376,7 +412,7 @@ export default function ValueCostingPage() {
                           <TableCell className="text-right tabular-nums font-bold text-sm text-primary">
                             ₹{fmt(subtotal)}
                           </TableCell>
-                          <TableCell />
+                          <TableCell colSpan={1} />
                         </TableRow>
                       </>
                     );
@@ -393,7 +429,7 @@ export default function ValueCostingPage() {
                   <TableCell className="text-right tabular-nums font-bold text-base text-primary">
                     ₹{fmt(grandTotal)}
                   </TableCell>
-                  <TableCell />
+                  <TableCell colSpan={1} />
                 </TableRow>
               </TableBody>
             </Table>

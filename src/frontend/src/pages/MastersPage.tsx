@@ -18,19 +18,24 @@ import {
   useCreateGsmRange,
   useCreateLayer,
   useCreateRM,
+  useCreateUnit,
   useDeleteGrade,
   useDeleteGsmRange,
   useDeleteLayer,
   useDeleteRM,
+  useDeleteUnit,
   useListGrades,
   useListGsmRanges,
   useListLayers,
   useListRMs,
+  useListUnits,
   useUpdateGrade,
   useUpdateGsmRange,
   useUpdateLayer,
   useUpdateRM,
+  useUpdateUnit,
 } from "../hooks/useQueries";
+import type { LocalUnit } from "../lib/localStore";
 
 // ─── Action Buttons ───────────────────────────────────────────────────────
 
@@ -976,6 +981,209 @@ function RMSection() {
   );
 }
 
+// ─── Unit Section ──────────────────────────────────────────────────────────
+
+function UnitSection() {
+  const { data: units = [], isLoading } = useListUnits();
+  const create = useCreateUnit();
+  const update = useUpdateUnit();
+  const del = useDeleteUnit();
+
+  const [editId, setEditId] = useState<bigint | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newDesc, setNewDesc] = useState("");
+  const [deletingId, setDeletingId] = useState<bigint | null>(null);
+
+  const startEdit = (u: LocalUnit) => {
+    setEditId(u.id);
+    setEditName(u.name);
+    setEditDesc(u.description);
+    setAdding(false);
+  };
+
+  const saveEdit = async () => {
+    if (!editId) return;
+    try {
+      await update.mutateAsync({
+        id: editId,
+        name: editName,
+        description: editDesc,
+      });
+      toast.success("Unit updated");
+      setEditId(null);
+    } catch {
+      toast.error("Failed to update unit");
+    }
+  };
+
+  const saveNew = async () => {
+    if (!newName.trim()) {
+      toast.error("Name is required");
+      return;
+    }
+    try {
+      await create.mutateAsync({
+        name: newName.trim(),
+        description: newDesc.trim(),
+      });
+      toast.success("Unit added");
+      setAdding(false);
+      setNewName("");
+      setNewDesc("");
+    } catch {
+      toast.error("Failed to add unit");
+    }
+  };
+
+  const handleDelete = async (id: bigint) => {
+    setDeletingId(id);
+    try {
+      await del.mutateAsync(id);
+      toast.success("Unit deleted");
+    } catch {
+      toast.error("Failed to delete unit");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  return (
+    <Card data-ocid="unit.card">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base font-semibold">
+            Unit (Site / Location)
+          </CardTitle>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setAdding(true);
+              setEditId(null);
+            }}
+            data-ocid="unit.open_modal_button"
+          >
+            <Plus className="w-3.5 h-3.5 mr-1" /> Add
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        <Table data-ocid="unit.table">
+          <TableHeader>
+            <TableRow className="bg-muted/30">
+              <TableHead>Name</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead className="w-24 text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading && (
+              <TableRow data-ocid="unit.loading_state">
+                <TableCell
+                  colSpan={3}
+                  className="text-center py-6 text-muted-foreground"
+                >
+                  <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+                  Loading...
+                </TableCell>
+              </TableRow>
+            )}
+            {!isLoading && units.length === 0 && !adding && (
+              <TableRow data-ocid="unit.empty_state">
+                <TableCell
+                  colSpan={3}
+                  className="text-center py-6 text-muted-foreground text-sm"
+                >
+                  No units yet.
+                </TableCell>
+              </TableRow>
+            )}
+            {units.map((u, i) => (
+              <TableRow key={String(u.id)} data-ocid={`unit.item.${i + 1}`}>
+                {editId === u.id ? (
+                  <>
+                    <TableCell className="py-2">
+                      <Input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="h-8 text-sm"
+                        data-ocid="unit.input"
+                      />
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <Input
+                        value={editDesc}
+                        onChange={(e) => setEditDesc(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </TableCell>
+                  </>
+                ) : (
+                  <>
+                    <TableCell className="font-medium">{u.name}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {u.description}
+                    </TableCell>
+                  </>
+                )}
+                <TableCell>
+                  <ActionButtons
+                    ocidPrefix={`unit.row.${i + 1}`}
+                    isEditing={editId === u.id}
+                    isSaving={update.isPending}
+                    isDeleting={deletingId === u.id}
+                    onEdit={() => startEdit(u)}
+                    onDelete={() => handleDelete(u.id)}
+                    onSave={saveEdit}
+                    onCancel={() => setEditId(null)}
+                  />
+                </TableCell>
+              </TableRow>
+            ))}
+            {adding && (
+              <TableRow data-ocid="unit.new.row">
+                <TableCell className="py-2">
+                  <Input
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="e.g. PM-1"
+                    className="h-8 text-sm"
+                    data-ocid="unit.new.input"
+                  />
+                </TableCell>
+                <TableCell className="py-2">
+                  <Input
+                    value={newDesc}
+                    onChange={(e) => setNewDesc(e.target.value)}
+                    placeholder="Description"
+                    className="h-8 text-sm"
+                  />
+                </TableCell>
+                <TableCell>
+                  <ActionButtons
+                    ocidPrefix="unit.new"
+                    isEditing
+                    isSaving={create.isPending}
+                    onSave={saveNew}
+                    onCancel={() => {
+                      setAdding(false);
+                      setNewName("");
+                      setNewDesc("");
+                    }}
+                  />
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Page ──────────────────────────────────────────────────────────────────
 
 export default function MastersPage() {
@@ -984,7 +1192,7 @@ export default function MastersPage() {
       <div className="mb-2">
         <h1 className="text-2xl font-display font-bold">Masters</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Manage Grade, GSM Range, Layer, and Raw Material master data.
+          Manage Grade, GSM Range, Layer, Raw Material, and Unit master data.
         </p>
       </div>
 
@@ -993,6 +1201,7 @@ export default function MastersPage() {
         <GsmRangeSection />
         <LayerSection />
         <RMSection />
+        <UnitSection />
       </div>
     </div>
   );

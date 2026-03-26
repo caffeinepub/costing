@@ -17,6 +17,7 @@ import {
   useListGsmRanges,
   useListLayers,
   useListRMs,
+  useListUnits,
 } from "../hooks/useQueries";
 
 const SKELETON_ROWS = ["s1", "s2", "s3", "s4", "s5", "s6"];
@@ -33,7 +34,7 @@ const SKELETON_CELLS = [
   "c10",
 ];
 const LS_KEY = "valueCostingRateOverrides";
-const LS_UNIT_KEY = "valueCostingUnitOverrides2";
+const LS_RECORD_UNIT_KEY = "valueCostingRecordUnitOverrides";
 
 type FlatRow = {
   recordId: bigint;
@@ -43,7 +44,6 @@ type FlatRow = {
   layer: string;
   rmName: string;
   rmId: string;
-  unit: string;
   baseQty: number;
   defaultRate: number;
   createdAt: bigint;
@@ -58,9 +58,9 @@ function loadOverrides(): Record<string, number> {
   }
 }
 
-function loadUnitOverrides(): Record<string, string> {
+function loadRecordUnitOverrides(): Record<string, string> {
   try {
-    const raw = localStorage.getItem(LS_UNIT_KEY);
+    const raw = localStorage.getItem(LS_RECORD_UNIT_KEY);
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
@@ -73,19 +73,24 @@ export default function ValueCostingPage() {
   const { data: gsmRanges, isLoading: loadingGsm } = useListGsmRanges();
   const { data: layers, isLoading: loadingLayers } = useListLayers();
   const { data: rms, isLoading: loadingRMs } = useListRMs();
+  const { data: units = [] } = useListUnits();
 
   const [rateOverrides, setRateOverrides] =
     useState<Record<string, number>>(loadOverrides);
-  const [unitOverrides, setUnitOverrides] =
-    useState<Record<string, string>>(loadUnitOverrides);
+  const [recordUnitOverrides, setRecordUnitOverrides] = useState<
+    Record<string, string>
+  >(loadRecordUnitOverrides);
 
   useEffect(() => {
     localStorage.setItem(LS_KEY, JSON.stringify(rateOverrides));
   }, [rateOverrides]);
 
   useEffect(() => {
-    localStorage.setItem(LS_UNIT_KEY, JSON.stringify(unitOverrides));
-  }, [unitOverrides]);
+    localStorage.setItem(
+      LS_RECORD_UNIT_KEY,
+      JSON.stringify(recordUnitOverrides),
+    );
+  }, [recordUnitOverrides]);
 
   const isLoading =
     loadingRecords ||
@@ -111,7 +116,6 @@ export default function ValueCostingPage() {
         layer: layerMap.get(rec.layerId) ?? "-",
         rmName: rm?.name ?? "-",
         rmId: item.rmId.toString(),
-        unit: rm?.unit ?? "kg",
         baseQty: item.quantity,
         defaultRate: rm?.unitCost ?? 0,
         createdAt: rec.createdAt,
@@ -141,14 +145,15 @@ export default function ValueCostingPage() {
     }));
   }
 
-  function getUnit(row: FlatRow): string {
-    const key = getOverrideKey(row);
-    return key in unitOverrides ? unitOverrides[key] : row.unit;
+  function getRecordUnit(recordId: bigint): string {
+    return recordUnitOverrides[recordId.toString()] ?? "";
   }
 
-  function handleUnitChange(row: FlatRow, value: string) {
-    const key = getOverrideKey(row);
-    setUnitOverrides((prev) => ({ ...prev, [key]: value }));
+  function handleRecordUnitChange(recordId: bigint, value: string) {
+    setRecordUnitOverrides((prev) => ({
+      ...prev,
+      [recordId.toString()]: value,
+    }));
   }
 
   // Group by recordId for subtotals
@@ -179,8 +184,8 @@ export default function ValueCostingPage() {
       "Grade",
       "GSM Range",
       "Layer",
-      "RM Material",
       "Unit",
+      "RM Material",
       "Base Qty (kg)",
       "Rate (₹/kg)",
       "Value (₹)",
@@ -192,8 +197,8 @@ export default function ValueCostingPage() {
         `"${r.grade}"`,
         `"${r.gsmRange}"`,
         `"${r.layer}"`,
+        `"${getRecordUnit(r.recordId)}"`,
         `"${r.rmName}"`,
-        `"${getUnit(r)}"`,
         r.baseQty.toFixed(2),
         getRate(r).toFixed(2),
         getValue(r).toFixed(2),
@@ -215,8 +220,8 @@ export default function ValueCostingPage() {
     "Grade",
     "GSM Range",
     "Layer",
-    "RM Material",
     "Unit",
+    "RM Material",
     "Base Qty (kg)",
     "Rate (₹/kg)",
     "Value (₹)",
@@ -313,10 +318,10 @@ export default function ValueCostingPage() {
                     GSM Range
                   </TableHead>
                   <TableHead className="text-xs font-semibold">Layer</TableHead>
+                  <TableHead className="text-xs font-semibold">Unit</TableHead>
                   <TableHead className="text-xs font-semibold">
                     RM Material
                   </TableHead>
-                  <TableHead className="text-xs font-semibold">Unit</TableHead>
                   <TableHead className="text-xs font-semibold text-right">
                     Base Qty (kg)
                   </TableHead>
@@ -339,6 +344,7 @@ export default function ValueCostingPage() {
                       0,
                     );
                     const isEven = groupIdx % 2 === 0;
+                    const recordId = groupRows[0].recordId;
                     return (
                       <>
                         {groupRows.map((row, rowIdx) => (
@@ -359,19 +365,32 @@ export default function ValueCostingPage() {
                             <TableCell className="text-sm">
                               {rowIdx === 0 ? row.layer : ""}
                             </TableCell>
+                            <TableCell className="py-1">
+                              {rowIdx === 0 ? (
+                                <select
+                                  value={getRecordUnit(recordId)}
+                                  onChange={(e) =>
+                                    handleRecordUnitChange(
+                                      recordId,
+                                      e.target.value,
+                                    )
+                                  }
+                                  className="h-7 text-sm border border-input rounded px-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring w-20"
+                                  data-ocid={`value_costing.unit.${groupIdx + 1}`}
+                                >
+                                  <option value="">— Select —</option>
+                                  {units.map((u) => (
+                                    <option key={String(u.id)} value={u.name}>
+                                      {u.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                ""
+                              )}
+                            </TableCell>
                             <TableCell className="text-sm">
                               {row.rmName}
-                            </TableCell>
-                            <TableCell className="py-1">
-                              <Input
-                                type="text"
-                                value={getUnit(row)}
-                                onChange={(e) =>
-                                  handleUnitChange(row, e.target.value)
-                                }
-                                className="w-20 h-7 text-sm px-2"
-                                data-ocid={`value_costing.unit.${groupIdx + 1}`}
-                              />
                             </TableCell>
                             <TableCell className="text-sm text-right tabular-nums">
                               {fmt(row.baseQty)}

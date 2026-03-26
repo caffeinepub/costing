@@ -161,12 +161,14 @@ export type LocalRM = {
   unitCost: number;
   unit: string;
 };
+export type LocalUnit = { id: bigint; name: string; description: string };
 
 const GRADES_KEY = "costing_app_grades_v1";
 const GSM_RANGES_KEY = "costing_app_gsm_ranges_v1";
 const LAYERS_KEY = "costing_app_layers_v1";
 const RMS_KEY = "costing_app_rms_v1";
-const MASTER_SEEDED_KEY = "costing_app_master_seeded_v1";
+const UNITS_KEY = "costing_app_units_v1";
+const MASTER_SEEDED_KEY = "costing_app_master_seeded_v2";
 
 // Seed data
 const DEFAULT_GRADES: Omit<LocalGrade, "id">[] = [
@@ -217,6 +219,13 @@ const DEFAULT_RMS: Omit<LocalRM, "id">[] = [
   { name: "ONP Local", unitCost: 0, unit: "kg" },
 ];
 
+const DEFAULT_UNITS: Omit<LocalUnit, "id">[] = [
+  { name: "PM-1", description: "Paper Machine 1" },
+  { name: "PM-2", description: "Paper Machine 2" },
+  { name: "PM-3", description: "Paper Machine 3" },
+  { name: "PM-4", description: "Paper Machine 4" },
+];
+
 function getMasterLocalId(): bigint {
   const key = "costing_app_master_id";
   const cur = BigInt(localStorage.getItem(key) ?? "1");
@@ -242,25 +251,41 @@ function saveMasterList<T>(key: string, items: T[]): void {
 export function seedMasterDataIfNeeded(): void {
   if (localStorage.getItem(MASTER_SEEDED_KEY)) return;
   const gradesList = loadMasterList<LocalGrade>(GRADES_KEY);
-  for (const g of DEFAULT_GRADES) {
-    gradesList.push({ ...g, id: getMasterLocalId() });
+  if (gradesList.length === 0) {
+    for (const g of DEFAULT_GRADES) {
+      gradesList.push({ ...g, id: getMasterLocalId() });
+    }
+    saveMasterList(GRADES_KEY, gradesList);
   }
-  saveMasterList(GRADES_KEY, gradesList);
   const gsmList = loadMasterList<LocalGsmRange>(GSM_RANGES_KEY);
-  for (const g of DEFAULT_GSM_RANGES) {
-    gsmList.push({ ...g, id: getMasterLocalId() });
+  if (gsmList.length === 0) {
+    for (const g of DEFAULT_GSM_RANGES) {
+      gsmList.push({ ...g, id: getMasterLocalId() });
+    }
+    saveMasterList(GSM_RANGES_KEY, gsmList);
   }
-  saveMasterList(GSM_RANGES_KEY, gsmList);
   const layersList = loadMasterList<LocalLayer>(LAYERS_KEY);
-  for (const l of DEFAULT_LAYERS) {
-    layersList.push({ ...l, id: getMasterLocalId() });
+  if (layersList.length === 0) {
+    for (const l of DEFAULT_LAYERS) {
+      layersList.push({ ...l, id: getMasterLocalId() });
+    }
+    saveMasterList(LAYERS_KEY, layersList);
   }
-  saveMasterList(LAYERS_KEY, layersList);
   const rmsList = loadMasterList<LocalRM>(RMS_KEY);
-  for (const r of DEFAULT_RMS) {
-    rmsList.push({ ...r, id: getMasterLocalId() });
+  if (rmsList.length === 0) {
+    for (const r of DEFAULT_RMS) {
+      rmsList.push({ ...r, id: getMasterLocalId() });
+    }
+    saveMasterList(RMS_KEY, rmsList);
   }
-  saveMasterList(RMS_KEY, rmsList);
+  // Always seed units if not present
+  const unitsList = loadMasterList<LocalUnit>(UNITS_KEY);
+  if (unitsList.length === 0) {
+    for (const u of DEFAULT_UNITS) {
+      unitsList.push({ ...u, id: getMasterLocalId() });
+    }
+    saveMasterList(UNITS_KEY, unitsList);
+  }
   localStorage.setItem(MASTER_SEEDED_KEY, "true");
 }
 
@@ -399,5 +424,37 @@ export function updateRM(
 export function deleteRM(id: bigint): boolean {
   const list = loadRMs().filter((r) => r.id !== id);
   saveMasterList(RMS_KEY, list);
+  return true;
+}
+
+// Unit CRUD (site/location classification: PM-1, PM-2, etc.)
+export function loadUnits(): LocalUnit[] {
+  return loadMasterList<LocalUnit>(UNITS_KEY).map((r) => ({
+    ...r,
+    id: BigInt(String(r.id)),
+  }));
+}
+export function createUnit(name: string, description: string): LocalUnit {
+  const list = loadUnits();
+  const item = { id: getMasterLocalId(), name, description };
+  list.push(item);
+  saveMasterList(UNITS_KEY, list);
+  return item;
+}
+export function updateUnit(
+  id: bigint,
+  name: string,
+  description: string,
+): boolean {
+  const list = loadUnits();
+  const idx = list.findIndex((u) => u.id === id);
+  if (idx === -1) return false;
+  list[idx] = { id, name, description };
+  saveMasterList(UNITS_KEY, list);
+  return true;
+}
+export function deleteUnit(id: bigint): boolean {
+  const list = loadUnits().filter((u) => u.id !== id);
+  saveMasterList(UNITS_KEY, list);
   return true;
 }

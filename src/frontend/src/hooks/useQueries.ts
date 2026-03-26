@@ -7,20 +7,24 @@ import {
   loadLayers,
   loadProductionEntries,
   loadRMs,
+  loadUnits,
   createGrade as localCreateGrade,
   createGsmRange as localCreateGsmRange,
   createLayer as localCreateLayer,
   createRM as localCreateRM,
+  createUnit as localCreateUnit,
   deleteCostingRecord as localDeleteCostingRecord,
   deleteGrade as localDeleteGrade,
   deleteGsmRange as localDeleteGsmRange,
   deleteLayer as localDeleteLayer,
   deleteProductionEntry as localDeleteProductionEntry,
   deleteRM as localDeleteRM,
+  deleteUnit as localDeleteUnit,
   updateGrade as localUpdateGrade,
   updateGsmRange as localUpdateGsmRange,
   updateLayer as localUpdateLayer,
   updateRM as localUpdateRM,
+  updateUnit as localUpdateUnit,
   saveCostingRecord,
   saveProductionEntry,
   seedMasterDataIfNeeded,
@@ -58,6 +62,15 @@ export function useListRMs() {
   return useQuery({
     queryKey: ["rms"],
     queryFn: () => loadRMs(),
+    staleTime: 0,
+  });
+}
+
+export function useListUnits() {
+  seedMasterDataIfNeeded();
+  return useQuery({
+    queryKey: ["units"],
+    queryFn: () => loadUnits(),
     staleTime: 0,
   });
 }
@@ -218,6 +231,35 @@ export function useDeleteRM() {
   return useMutation({
     mutationFn: (id: bigint) => Promise.resolve(localDeleteRM(id)),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["rms"] }),
+  });
+}
+
+export function useCreateUnit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (d: { name: string; description: string }) => {
+      const item = localCreateUnit(d.name, d.description);
+      return Promise.resolve(item.id);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["units"] }),
+  });
+}
+
+export function useUpdateUnit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (d: { id: bigint; name: string; description: string }) => {
+      return Promise.resolve(localUpdateUnit(d.id, d.name, d.description));
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["units"] }),
+  });
+}
+
+export function useDeleteUnit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: bigint) => Promise.resolve(localDeleteUnit(id)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["units"] }),
   });
 }
 

@@ -37,10 +37,20 @@ import {
 } from "../hooks/useQueries";
 
 const VC_LS_KEY = "valueCostingRateOverrides";
+const VC_RECORD_UNIT_KEY = "valueCostingRecordUnitOverrides";
 
 function loadVCRateOverrides(): Record<string, number> {
   try {
     const raw = localStorage.getItem(VC_LS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function loadVCRecordUnitOverrides(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(VC_RECORD_UNIT_KEY);
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
@@ -85,6 +95,7 @@ export default function ProductionRecordsPage() {
   const [actualEntries] = useState<ActualProductionEntry[]>(loadActualEntries);
 
   const rmMap = new Map(rms.map((r) => [r.id.toString(), r]));
+  const vcRecordUnits = loadVCRecordUnitOverrides();
 
   const getGradeName = (id: bigint) =>
     grades.find((g) => g.id === id)?.name ?? "";
@@ -94,6 +105,9 @@ export default function ProductionRecordsPage() {
   const getRMUnit = (id: bigint) => rmMap.get(id.toString())?.unit ?? "kg";
   const getRMDefaultRate = (id: bigint) =>
     rmMap.get(id.toString())?.unitCost ?? 0;
+
+  const getVCRecordUnit = (costingRecordId: bigint | string): string =>
+    vcRecordUnits[costingRecordId.toString()] ?? "";
 
   const getRate = (costingRecordId: bigint, rmId: bigint): number => {
     const overrides = loadVCRateOverrides();
@@ -181,9 +195,9 @@ export default function ProductionRecordsPage() {
     const headers = [
       "Date",
       "Costing Record",
+      "Unit",
       "Production Qty (MT)",
       "RM Name",
-      "Unit",
       "Calculated Consumption (kg)",
       "Rate (₹/kg)",
       "Value (₹)",
@@ -193,11 +207,12 @@ export default function ProductionRecordsPage() {
     const rows: string[][] = [];
     for (const entry of entries) {
       const recordLabel = getRecordLabel(entry.costingRecordId);
+      const vcUnit = getVCRecordUnit(entry.costingRecordId);
       const date = formatDate(entry.createdAt);
       const qty = entry.productionQtyMT.toFixed(3);
 
       if (entry.calculatedItems.length === 0) {
-        rows.push([date, recordLabel, qty, "", "", "", "", "", ""]);
+        rows.push([date, recordLabel, vcUnit, qty, "", "", "", "", ""]);
       } else {
         for (const ci of entry.calculatedItems) {
           const rate = getRate(entry.costingRecordId, ci.rmId);
@@ -207,9 +222,9 @@ export default function ProductionRecordsPage() {
           rows.push([
             date,
             recordLabel,
+            vcUnit,
             qty,
             getRMName(ci.rmId),
-            getRMUnit(ci.rmId),
             ci.calculatedQty.toFixed(2),
             rate.toFixed(2),
             value.toFixed(2),
@@ -240,6 +255,87 @@ export default function ProductionRecordsPage() {
     URL.revokeObjectURL(url);
     toast.success("Excel file downloaded");
   };
+
+  // Build date-wise aggregated summary from actualEntries
+  const buildActualSummary = () => {
+    // Group entries by date
+    const dateGroups: Record<string, ActualProductionEntry[]> = {};
+    for (const entry of actualEntries) {
+      const dateKey = new Date(entry.date).toLocaleDateString();
+      if (!dateGroups[dateKey]) dateGroups[dateKey] = [];
+      dateGroups[dateKey].push(entry);
+    }
+
+    // Sort dates descending
+    const sortedDates = Object.keys(dateGroups).sort(
+      (a, b) => new Date(b).getTime() - new Date(a).getTime(),
+    );
+
+    return sortedDates.map((dateKey) => {
+      const entriesForDate = dateGroups[dateKey];
+
+      // Aggregate by RM name within this date
+      const rmAgg: Record<
+        string,
+        {
+          rmName: string;
+          unit: string;
+          totalPlanned: number;
+          totalActual: number;
+        }
+      > = {};
+
+      let totalProductionQtyMT = 0;
+
+      for (const entry of entriesForDate) {
+        totalProductionQtyMT += entry.productionQtyMT;
+        const rec = records.find(
+          (r) => r.id.toString() === entry.costingRecordId,
+        );
+
+        for (const item of entry.items) {
+          if (!rmAgg[item.rmName]) {
+            rmAgg[item.rmName] = {
+              rmName: item.rmName,
+              unit: item.unit,
+              totalPlanned: 0,
+              totalActual: 0,
+            };
+          }
+
+          // Calculate planned from costing record
+          let planned = 0;
+          if (rec) {
+            const rmItem = rec.items.find(
+              (ri: any) => ri.rmId.toString() === item.rmId,
+            );
+            if (rmItem) {
+              planned = rmItem.quantity * entry.productionQtyMT;
+            }
+          }
+
+          rmAgg[item.rmName].totalPlanned += planned;
+          rmAgg[item.rmName].totalActual += item.actualConsumption;
+        }
+      }
+
+      const rmRows = Object.values(rmAgg);
+      const grandTotalPlanned = rmRows.reduce((s, r) => s + r.totalPlanned, 0);
+      const grandTotalActual = rmRows.reduce((s, r) => s + r.totalActual, 0);
+      const grandVariance = grandTotalActual - grandTotalPlanned;
+
+      return {
+        dateKey,
+        totalProductionQtyMT,
+        rmRows,
+        grandTotalPlanned,
+        grandTotalActual,
+        grandVariance,
+      };
+    });
+  };
+
+  const actualSummary = buildActualSummary();
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -428,11 +524,11 @@ export default function ProductionRecordsPage() {
               <TableHeader>
                 <TableRow className="bg-muted/50">
                   <TableHead>Costing Record</TableHead>
+                  <TableHead>Unit</TableHead>
                   <TableHead className="text-right">
                     Production Qty (MT)
                   </TableHead>
                   <TableHead>RM Name</TableHead>
-                  <TableHead>Unit</TableHead>
                   <TableHead className="text-right">
                     Calculated Consumption (kg)
                   </TableHead>
@@ -446,6 +542,7 @@ export default function ProductionRecordsPage() {
               <TableBody>
                 {entries.map((entry, i) => {
                   const items = entry.calculatedItems;
+                  const vcUnit = getVCRecordUnit(entry.costingRecordId);
                   if (items.length === 0) {
                     return (
                       <TableRow
@@ -455,11 +552,14 @@ export default function ProductionRecordsPage() {
                         <TableCell className="font-medium">
                           {getRecordLabel(BigInt(entry.costingRecordId))}
                         </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {vcUnit}
+                        </TableCell>
                         <TableCell className="text-right font-semibold">
                           {entry.productionQtyMT.toFixed(3)}
                         </TableCell>
                         <TableCell
-                          colSpan={6}
+                          colSpan={5}
                           className="text-xs text-muted-foreground"
                         >
                           —
@@ -491,14 +591,14 @@ export default function ProductionRecordsPage() {
                         <TableCell className="font-medium">
                           {isFirst ? getRecordLabel(entry.costingRecordId) : ""}
                         </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {isFirst ? vcUnit : ""}
+                        </TableCell>
                         <TableCell className="text-right font-semibold">
                           {isFirst ? entry.productionQtyMT.toFixed(3) : ""}
                         </TableCell>
                         <TableCell className="text-sm">
                           {getRMName(ci.rmId)}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {getRMUnit(ci.rmId)}
                         </TableCell>
                         <TableCell className="text-right text-sm">
                           {ci.calculatedQty.toFixed(2)}
@@ -539,7 +639,7 @@ export default function ProductionRecordsPage() {
         )}
       </div>
 
-      {/* Actual Production Summary */}
+      {/* Actual Production Summary (Date-wise aggregated) */}
       <div>
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
           <BarChart2 className="w-4 h-4" />
@@ -557,111 +657,125 @@ export default function ProductionRecordsPage() {
             </p>
           </div>
         ) : (
-          (() => {
-            // Group by date
-            const groups: Record<string, ActualProductionEntry[]> = {};
-            for (const entry of actualEntries) {
-              const dateKey = new Date(entry.date).toLocaleDateString();
-              if (!groups[dateKey]) groups[dateKey] = [];
-              groups[dateKey].push(entry);
-            }
-            // Sort dates descending
-            const sortedDates = Object.keys(groups).sort((a, b) => {
-              return new Date(b).getTime() - new Date(a).getTime();
-            });
-            return (
-              <div className="space-y-4">
-                {sortedDates.map((dateKey) => (
-                  <div
-                    key={dateKey}
-                    className="rounded-lg border overflow-hidden"
-                  >
-                    <div className="bg-muted/70 px-4 py-2 text-sm font-semibold border-b">
-                      {dateKey}
-                    </div>
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/50">
-                          <TableHead>Costing Record</TableHead>
-                          <TableHead>RM Name</TableHead>
-                          <TableHead>Unit</TableHead>
-                          <TableHead className="text-right">
-                            Planned (kg)
-                          </TableHead>
-                          <TableHead className="text-right">
-                            Actual (kg)
-                          </TableHead>
-                          <TableHead className="text-right">
-                            Variance (kg)
-                          </TableHead>
-                          <TableHead className="text-right">
-                            Variance (%)
-                          </TableHead>
+          <div className="space-y-4">
+            {actualSummary.map((group) => (
+              <div
+                key={group.dateKey}
+                className="rounded-lg border overflow-hidden"
+              >
+                {/* Date header */}
+                <div className="bg-muted/70 px-4 py-2 flex items-center justify-between border-b">
+                  <span className="text-sm font-semibold">{group.dateKey}</span>
+                  <span className="text-xs text-muted-foreground">
+                    Total Production:{" "}
+                    <span className="font-semibold text-foreground">
+                      {group.totalProductionQtyMT.toFixed(3)} MT
+                    </span>
+                  </span>
+                </div>
+
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/30">
+                      <TableHead>RM Name</TableHead>
+                      <TableHead>Unit</TableHead>
+                      <TableHead className="text-right">
+                        Total Planned Qty (kg)
+                      </TableHead>
+                      <TableHead className="text-right">
+                        Total Actual Qty (kg)
+                      </TableHead>
+                      <TableHead className="text-right">
+                        Variance (kg)
+                      </TableHead>
+                      <TableHead className="text-right">Variance (%)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {group.rmRows.map((row, ri) => {
+                      const variance = row.totalActual - row.totalPlanned;
+                      const variancePct =
+                        row.totalPlanned > 0
+                          ? (variance / row.totalPlanned) * 100
+                          : 0;
+                      const overPlan = variance > 0;
+                      return (
+                        <TableRow
+                          key={row.rmName}
+                          data-ocid={`actual_production_summary.item.${ri + 1}`}
+                        >
+                          <TableCell className="font-medium">
+                            {row.rmName}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {row.unit}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {row.totalPlanned.toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {row.totalActual.toFixed(2)}
+                          </TableCell>
+                          <TableCell
+                            className={`text-right font-semibold ${
+                              overPlan ? "text-destructive" : "text-green-600"
+                            }`}
+                          >
+                            {variance > 0 ? "+" : ""}
+                            {variance.toFixed(2)}
+                          </TableCell>
+                          <TableCell
+                            className={`text-right font-semibold ${
+                              overPlan ? "text-destructive" : "text-green-600"
+                            }`}
+                          >
+                            {variance > 0 ? "+" : ""}
+                            {variancePct.toFixed(1)}%
+                          </TableCell>
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {groups[dateKey].flatMap((entry, ei) => {
-                          const rec = records.find(
-                            (r) => r.id.toString() === entry.costingRecordId,
-                          );
-                          return entry.items.map((item, ii) => {
-                            // Find planned qty from costing record
-                            let planned = 0;
-                            if (rec) {
-                              const rmItem = rec.items.find(
-                                (ri: any) => ri.rmId.toString() === item.rmId,
-                              );
-                              if (rmItem) {
-                                planned =
-                                  rmItem.quantity * entry.productionQtyMT;
-                              }
-                            }
-                            const actual = item.actualConsumption;
-                            const variance = actual - planned;
-                            const variancePct =
-                              planned > 0 ? (variance / planned) * 100 : 0;
-                            const overPlan = variance > 0;
-                            return (
-                              <TableRow
-                                key={`${entry.id}-${item.rmId}-${ii}`}
-                                data-ocid={`actual_production_summary.item.${ei + 1}`}
-                              >
-                                <TableCell className="font-medium">
-                                  {getRecordLabel(
-                                    BigInt(entry.costingRecordId),
-                                  )}
-                                </TableCell>
-                                <TableCell>{item.rmName}</TableCell>
-                                <TableCell>{item.unit}</TableCell>
-                                <TableCell className="text-right">
-                                  {planned.toFixed(2)}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  {actual.toFixed(2)}
-                                </TableCell>
-                                <TableCell
-                                  className={`text-right font-semibold ${overPlan ? "text-destructive" : "text-green-600"}`}
-                                >
-                                  {variance > 0 ? "+" : ""}
-                                  {variance.toFixed(2)}
-                                </TableCell>
-                                <TableCell
-                                  className={`text-right font-semibold ${overPlan ? "text-destructive" : "text-green-600"}`}
-                                >
-                                  {variance > 0 ? "+" : ""}
-                                  {variancePct.toFixed(1)}%
-                                </TableCell>
-                              </TableRow>
-                            );
-                          });
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ))}
+                      );
+                    })}
+
+                    {/* Date group footer totals */}
+                    <TableRow className="bg-muted/50 font-semibold border-t-2">
+                      <TableCell colSpan={2} className="text-sm">
+                        Grand Total
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {group.grandTotalPlanned.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {group.grandTotalActual.toFixed(2)}
+                      </TableCell>
+                      <TableCell
+                        className={`text-right ${
+                          group.grandVariance > 0
+                            ? "text-destructive"
+                            : "text-green-600"
+                        }`}
+                      >
+                        {group.grandVariance > 0 ? "+" : ""}
+                        {group.grandVariance.toFixed(2)}
+                      </TableCell>
+                      <TableCell
+                        className={`text-right ${
+                          group.grandVariance > 0
+                            ? "text-destructive"
+                            : "text-green-600"
+                        }`}
+                      >
+                        {group.grandTotalPlanned > 0
+                          ? `${
+                              group.grandVariance > 0 ? "+" : ""
+                            }${((group.grandVariance / group.grandTotalPlanned) * 100).toFixed(1)}%`
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
               </div>
-            );
-          })()
+            ))}
+          </div>
         )}
       </div>
     </div>

@@ -1,7 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
-  BarChart2,
   Calculator,
   ClipboardList,
   Database,
@@ -17,11 +16,6 @@ const navItems = [
     to: "/production-records",
     label: "Production Records",
     icon: ClipboardList,
-  },
-  {
-    to: "/actual-production",
-    label: "Actual Production",
-    icon: BarChart2,
   },
 ];
 

@@ -9,7 +9,6 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import Layout from "./components/Layout";
-import ActualProductionPage from "./pages/ActualProductionPage";
 import CostingCalculatorPage from "./pages/CostingCalculatorPage";
 import MastersPage from "./pages/MastersPage";
 import ProductionRecordsPage from "./pages/ProductionRecordsPage";
@@ -68,12 +67,6 @@ const valueCostingRoute = createRoute({
   component: ValueCostingPage,
 });
 
-const actualProductionRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/actual-production",
-  component: ActualProductionPage,
-});
-
 const routeTree = rootRoute.addChildren([
   indexRoute,
   calculatorRoute,
@@ -81,7 +74,6 @@ const routeTree = rootRoute.addChildren([
   mastersRoute,
   productionRecordsRoute,
   valueCostingRoute,
-  actualProductionRoute,
 ]);
 
 const router = createRouter({ routeTree });

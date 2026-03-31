@@ -30,6 +30,7 @@ import {
 } from "../hooks/useQueries";
 
 const VC_LS_KEY = "valueCostingRateOverrides";
+const VC_UNIT_LS_KEY = "valueCostingRecordUnitOverrides";
 
 function loadVCRateOverrides(): Record<string, number> {
   try {
@@ -38,6 +39,20 @@ function loadVCRateOverrides(): Record<string, number> {
   } catch {
     return {};
   }
+}
+
+function loadVCRecordUnitOverrides(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(VC_UNIT_LS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function getVCUnit(costingRecordId: bigint): string {
+  const overrides = loadVCRecordUnitOverrides();
+  return overrides[costingRecordId.toString()] ?? "";
 }
 
 export default function ProductionRecordsPage() {
@@ -124,7 +139,8 @@ export default function ProductionRecordsPage() {
       "Date",
       "Costing Record",
       "RM Name",
-      "Unit",
+      "RM Unit",
+      "Site/Unit",
       "Base Qty (kg)",
       "Calculated Consumption (kg)",
       "Rate (₹/kg)",
@@ -141,6 +157,7 @@ export default function ProductionRecordsPage() {
         ? `${gradeName} ${gsmName}${rec.name ? ` - ${rec.name}` : ""}`
         : `Record #${entry.costingRecordId}`;
       const dateStr = new Date(Number(entry.createdAt)).toLocaleDateString();
+      const vcUnit = getVCUnit(entry.costingRecordId);
 
       for (const item of entry.calculatedItems) {
         const rate = getRate(entry.costingRecordId, item.rmId);
@@ -152,6 +169,7 @@ export default function ProductionRecordsPage() {
           recordLabel,
           getRMName(item.rmId),
           getRMUnit(item.rmId),
+          vcUnit,
           item.baseQty.toFixed(2),
           item.calculatedQty.toFixed(2),
           rate.toFixed(2),
@@ -359,7 +377,8 @@ export default function ProductionRecordsPage() {
                   <TableHead>Date</TableHead>
                   <TableHead>Costing Record</TableHead>
                   <TableHead>RM Name</TableHead>
-                  <TableHead>Unit</TableHead>
+                  <TableHead>RM Unit</TableHead>
+                  <TableHead>Site/Unit</TableHead>
                   <TableHead className="text-right">Base Qty (kg)</TableHead>
                   <TableHead className="text-right">
                     Calc. Consumption (kg)
@@ -382,6 +401,7 @@ export default function ProductionRecordsPage() {
                   const dateStr = new Date(
                     Number(entry.createdAt),
                   ).toLocaleDateString();
+                  const vcUnit = getVCUnit(entry.costingRecordId);
 
                   return entry.calculatedItems.map((item, itemIdx) => {
                     const rate = getRate(entry.costingRecordId, item.rmId);
@@ -411,6 +431,19 @@ export default function ProductionRecordsPage() {
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {getRMUnit(item.rmId)}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {isFirst ? (
+                            vcUnit ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                                {vcUnit}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )
+                          ) : (
+                            ""
+                          )}
                         </TableCell>
                         <TableCell className="text-right text-sm">
                           {item.baseQty.toFixed(2)}

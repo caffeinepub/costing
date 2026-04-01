@@ -55,9 +55,20 @@ function getVCUnit(costingRecordId: bigint): string {
   return overrides[costingRecordId.toString()] ?? "";
 }
 
+function formatDate(ts: bigint | number): string {
+  const d = new Date(Number(ts));
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
 export default function ProductionRecordsPage() {
   const [selectedRecordId, setSelectedRecordId] = useState<string>("");
   const [productionQty, setProductionQty] = useState<string>("");
+  const [entryDate, setEntryDate] = useState<string>(() =>
+    new Date().toISOString().slice(0, 10),
+  );
 
   const { data: records = [] } = useListCostingRecords();
   const { data: grades = [] } = useListGrades();
@@ -120,10 +131,12 @@ export default function ProductionRecordsPage() {
       await createEntry.mutateAsync({
         costingRecordId: selectedRecord.id,
         productionQtyMT: productionQtyNum,
+        date: entryDate ? new Date(entryDate) : undefined,
       });
       toast.success("Production entry saved successfully");
       setSelectedRecordId("");
       setProductionQty("");
+      setEntryDate(new Date().toISOString().slice(0, 10));
     } catch {
       toast.error("Failed to save production entry");
     }
@@ -139,7 +152,7 @@ export default function ProductionRecordsPage() {
       "Date",
       "Costing Record",
       "RM Name",
-      "RM Unit",
+      "Production QTY (MT)",
       "Site/Unit",
       "Base Qty (kg)",
       "Calculated Consumption (kg)",
@@ -156,7 +169,7 @@ export default function ProductionRecordsPage() {
       const recordLabel = rec
         ? `${gradeName} ${gsmName}${rec.name ? ` - ${rec.name}` : ""}`
         : `Record #${entry.costingRecordId}`;
-      const dateStr = new Date(Number(entry.createdAt)).toLocaleDateString();
+      const dateStr = formatDate(entry.createdAt);
       const vcUnit = getVCUnit(entry.costingRecordId);
 
       for (const item of entry.calculatedItems) {
@@ -168,7 +181,7 @@ export default function ProductionRecordsPage() {
           dateStr,
           recordLabel,
           getRMName(item.rmId),
-          getRMUnit(item.rmId),
+          entry.productionQtyMT.toFixed(3),
           vcUnit,
           item.baseQty.toFixed(2),
           item.calculatedQty.toFixed(2),
@@ -236,6 +249,19 @@ export default function ProductionRecordsPage() {
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="entry-date">
+                Date <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="entry-date"
+                type="date"
+                value={entryDate}
+                onChange={(e) => setEntryDate(e.target.value)}
+                data-ocid="production.date_input"
+              />
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="costing-record">
                 Costing Record <span className="text-destructive">*</span>
@@ -377,7 +403,9 @@ export default function ProductionRecordsPage() {
                   <TableHead>Date</TableHead>
                   <TableHead>Costing Record</TableHead>
                   <TableHead>RM Name</TableHead>
-                  <TableHead>RM Unit</TableHead>
+                  <TableHead className="text-right">
+                    Production QTY (MT)
+                  </TableHead>
                   <TableHead>Site/Unit</TableHead>
                   <TableHead className="text-right">Base Qty (kg)</TableHead>
                   <TableHead className="text-right">
@@ -398,9 +426,7 @@ export default function ProductionRecordsPage() {
                   const recordLabel = rec
                     ? `${gradeName} ${gsmName}${rec.name ? ` - ${rec.name}` : ""}`
                     : `Record #${entry.costingRecordId}`;
-                  const dateStr = new Date(
-                    Number(entry.createdAt),
-                  ).toLocaleDateString();
+                  const dateStr = formatDate(entry.createdAt);
                   const vcUnit = getVCUnit(entry.costingRecordId);
 
                   return entry.calculatedItems.map((item, itemIdx) => {
@@ -429,8 +455,8 @@ export default function ProductionRecordsPage() {
                         <TableCell className="text-sm">
                           {getRMName(item.rmId)}
                         </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {getRMUnit(item.rmId)}
+                        <TableCell className="text-right text-sm font-semibold text-primary">
+                          {isFirst ? entry.productionQtyMT.toFixed(3) : ""}
                         </TableCell>
                         <TableCell className="text-sm">
                           {isFirst ? (

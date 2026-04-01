@@ -315,6 +315,7 @@ export function useCreateProductionEntry() {
     mutationFn: async (d: {
       costingRecordId: bigint;
       productionQtyMT: number;
+      date?: Date;
     }) => {
       const record = loadCostingRecords().find(
         (r) => r.id === d.costingRecordId,
@@ -324,6 +325,7 @@ export function useCreateProductionEntry() {
         d.costingRecordId,
         d.productionQtyMT,
         record.items,
+        d.date,
       );
       return entry.id;
     },

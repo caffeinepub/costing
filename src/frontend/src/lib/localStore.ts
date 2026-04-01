@@ -121,6 +121,7 @@ export function saveProductionEntry(
   costingRecordId: bigint,
   productionQtyMT: number,
   items: Array<{ rmId: bigint; quantity: number }>,
+  customDate?: Date,
 ): LocalProductionEntry {
   const entries = loadProductionEntries();
   const calculatedItems = items.map((item) => ({
@@ -128,12 +129,13 @@ export function saveProductionEntry(
     baseQty: item.quantity,
     calculatedQty: item.quantity * productionQtyMT,
   }));
+  const ts = customDate ? customDate.getTime() : Date.now();
   const newEntry: LocalProductionEntry = {
     id: getLocalId(),
     costingRecordId,
     productionQtyMT,
     calculatedItems,
-    createdAt: BigInt(Date.now()) * 1_000_000n,
+    createdAt: BigInt(ts) * 1_000_000n,
   };
   entries.push(newEntry);
   localStorage.setItem(PRODUCTION_ENTRIES_KEY, serialize(entries));

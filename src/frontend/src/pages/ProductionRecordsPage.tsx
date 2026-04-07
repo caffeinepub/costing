@@ -17,7 +17,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ClipboardList, Download, Loader2 } from "lucide-react";
+import {
+  Check,
+  ClipboardList,
+  Download,
+  Loader2,
+  Pencil,
+  X,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -27,6 +34,7 @@ import {
   useListGsmRanges,
   useListProductionEntries,
   useListRMs,
+  useUpdateProductionEntryDate,
 } from "../hooks/useQueries";
 
 const VC_LS_KEY = "valueCostingRateOverrides";
@@ -55,11 +63,23 @@ function getVCUnit(costingRecordId: bigint): string {
   return overrides[costingRecordId.toString()] ?? "";
 }
 
-function formatDate(ts: bigint | number): string {
-  const d = new Date(Number(ts));
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
+// Get the display date from entry: prefer entryDate string, fallback to createdAt
+function getEntryDateStr(entry: {
+  createdAt: bigint;
+  entryDate?: string;
+}): string {
+  if (entry.entryDate) return entry.entryDate;
+  // fallback: derive from createdAt (nanoseconds -> ms)
+  const ms = Number(entry.createdAt) / 1_000_000;
+  const d = new Date(ms);
   const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function formatDisplayDate(isoDate: string): string {
+  const [yyyy, mm, dd] = isoDate.split("-");
   return `${dd}/${mm}/${yyyy}`;
 }
 
@@ -70,12 +90,17 @@ export default function ProductionRecordsPage() {
     new Date().toISOString().slice(0, 10),
   );
 
+  // Inline date editing state: entryId -> editing date string
+  const [editingDateId, setEditingDateId] = useState<string | null>(null);
+  const [editingDateValue, setEditingDateValue] = useState<string>("");
+
   const { data: records = [] } = useListCostingRecords();
   const { data: grades = [] } = useListGrades();
   const { data: gsmRanges = [] } = useListGsmRanges();
   const { data: rms = [] } = useListRMs();
   const { data: productionEntries = [] } = useListProductionEntries();
   const createEntry = useCreateProductionEntry();
+  const updateDateMutation = useUpdateProductionEntryDate();
 
   const rmMap = new Map(rms.map((r) => [r.id.toString(), r]));
 
@@ -131,7 +156,7 @@ export default function ProductionRecordsPage() {
       await createEntry.mutateAsync({
         costingRecordId: selectedRecord.id,
         productionQtyMT: productionQtyNum,
-        date: entryDate ? new Date(entryDate) : undefined,
+        date: entryDate ? new Date(`${entryDate}T00:00:00`) : undefined,
       });
       toast.success("Production entry saved successfully");
       setSelectedRecordId("");
@@ -140,6 +165,31 @@ export default function ProductionRecordsPage() {
     } catch {
       toast.error("Failed to save production entry");
     }
+  };
+
+  const handleStartEditDate = (entryId: bigint, currentDate: string) => {
+    setEditingDateId(entryId.toString());
+    setEditingDateValue(currentDate);
+  };
+
+  const handleSaveDate = async (entryId: bigint) => {
+    if (!editingDateValue) return;
+    try {
+      await updateDateMutation.mutateAsync({
+        id: entryId,
+        date: editingDateValue,
+      });
+      toast.success("Date updated");
+    } catch {
+      toast.error("Failed to update date");
+    }
+    setEditingDateId(null);
+    setEditingDateValue("");
+  };
+
+  const handleCancelEditDate = () => {
+    setEditingDateId(null);
+    setEditingDateValue("");
   };
 
   const handleDownloadExcel = () => {
@@ -169,7 +219,7 @@ export default function ProductionRecordsPage() {
       const recordLabel = rec
         ? `${gradeName} ${gsmName}${rec.name ? ` - ${rec.name}` : ""}`
         : `Record #${entry.costingRecordId}`;
-      const dateStr = formatDate(entry.createdAt);
+      const dateStr = formatDisplayDate(getEntryDateStr(entry));
       const vcUnit = getVCUnit(entry.costingRecordId);
 
       for (const item of entry.calculatedItems) {
@@ -426,8 +476,10 @@ export default function ProductionRecordsPage() {
                   const recordLabel = rec
                     ? `${gradeName} ${gsmName}${rec.name ? ` - ${rec.name}` : ""}`
                     : `Record #${entry.costingRecordId}`;
-                  const dateStr = formatDate(entry.createdAt);
+                  const isoDate = getEntryDateStr(entry);
+                  const displayDate = formatDisplayDate(isoDate);
                   const vcUnit = getVCUnit(entry.costingRecordId);
+                  const isEditingDate = editingDateId === entry.id.toString();
 
                   return entry.calculatedItems.map((item, itemIdx) => {
                     const rate = getRate(entry.costingRecordId, item.rmId);
@@ -446,8 +498,54 @@ export default function ProductionRecordsPage() {
                           entryIdx % 2 === 0 ? "bg-background" : "bg-muted/20"
                         }
                       >
-                        <TableCell className="text-sm text-muted-foreground">
-                          {isFirst ? dateStr : ""}
+                        <TableCell className="text-sm text-muted-foreground min-w-[140px]">
+                          {isFirst ? (
+                            isEditingDate ? (
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  type="date"
+                                  value={editingDateValue}
+                                  onChange={(e) =>
+                                    setEditingDateValue(e.target.value)
+                                  }
+                                  className="h-7 text-xs w-36 px-1"
+                                  autoFocus
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveDate(entry.id)}
+                                  className="text-green-600 hover:text-green-700"
+                                  title="Save date"
+                                >
+                                  <Check className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCancelEditDate}
+                                  className="text-destructive hover:text-destructive/80"
+                                  title="Cancel"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1 group">
+                                <span>{displayDate}</span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleStartEditDate(entry.id, isoDate)
+                                  }
+                                  className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+                                  title="Edit date"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )
+                          ) : (
+                            ""
+                          )}
                         </TableCell>
                         <TableCell className="font-medium text-sm">
                           {isFirst ? recordLabel : ""}

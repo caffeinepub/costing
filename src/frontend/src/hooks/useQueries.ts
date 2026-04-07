@@ -23,6 +23,7 @@ import {
   updateGrade as localUpdateGrade,
   updateGsmRange as localUpdateGsmRange,
   updateLayer as localUpdateLayer,
+  updateProductionEntryDate as localUpdateProductionEntryDate,
   updateRM as localUpdateRM,
   updateUnit as localUpdateUnit,
   saveCostingRecord,
@@ -339,6 +340,16 @@ export function useDeleteProductionEntry() {
     mutationFn: async (id: bigint) => {
       localDeleteProductionEntry(id);
       return true;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["productionEntries"] }),
+  });
+}
+
+export function useUpdateProductionEntryDate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (d: { id: bigint; date: string }) => {
+      return Promise.resolve(localUpdateProductionEntryDate(d.id, d.date));
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["productionEntries"] }),
   });

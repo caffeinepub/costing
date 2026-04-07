@@ -44,6 +44,8 @@ export type LocalProductionEntry = {
     calculatedQty: number;
   }>;
   createdAt: bigint;
+  // entryDate stored as YYYY-MM-DD string for reliable display/editing
+  entryDate?: string;
 };
 
 const toBigInt = (v: unknown): bigint =>
@@ -130,16 +132,39 @@ export function saveProductionEntry(
     calculatedQty: item.quantity * productionQtyMT,
   }));
   const ts = customDate ? customDate.getTime() : Date.now();
+  // Store entryDate as YYYY-MM-DD string for reliable display/editing
+  const entryDateStr = customDate
+    ? customDate.toISOString().slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
   const newEntry: LocalProductionEntry = {
     id: getLocalId(),
     costingRecordId,
     productionQtyMT,
     calculatedItems,
     createdAt: BigInt(ts) * 1_000_000n,
+    entryDate: entryDateStr,
   };
   entries.push(newEntry);
   localStorage.setItem(PRODUCTION_ENTRIES_KEY, serialize(entries));
   return newEntry;
+}
+
+export function updateProductionEntryDate(
+  id: bigint,
+  newDate: string,
+): boolean {
+  const entries = loadProductionEntries();
+  const idx = entries.findIndex((e) => e.id === id);
+  if (idx === -1) return false;
+  // Parse the YYYY-MM-DD date and update both entryDate and createdAt
+  const d = new Date(`${newDate}T00:00:00`);
+  entries[idx] = {
+    ...entries[idx],
+    entryDate: newDate,
+    createdAt: BigInt(d.getTime()) * 1_000_000n,
+  };
+  localStorage.setItem(PRODUCTION_ENTRIES_KEY, serialize(entries));
+  return true;
 }
 
 export function deleteProductionEntry(id: bigint): void {

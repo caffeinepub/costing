@@ -4,6 +4,7 @@ import {
   Calculator,
   ClipboardList,
   Database,
+  Layers,
   LayoutDashboard,
   TrendingUp,
 } from "lucide-react";
@@ -16,6 +17,11 @@ const navItems = [
     to: "/production-records",
     label: "Production Records",
     icon: ClipboardList,
+  },
+  {
+    to: "/consumption",
+    label: "Consumption",
+    icon: Layers,
   },
 ];
 
